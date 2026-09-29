@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<link rel="icon" type="image/png" href="الشعار2.png">
+<link rel="apple-touch-icon" href="الشعار2.png">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>RAED Advertising — Creative Studio</title>
+<meta name="theme-color" content="#04091c">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="styles.css">
+<script>document.documentElement.classList.add('js')</script>
+</head>
+<body>
+
+<header class="nav" id="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#home"><img class="brand-logo" data-logo alt="RAED Advertising"></a>
+    <nav class="nav-links" id="navLinks" aria-label="Main">
+      <a href="#home" class="active" data-t="navHome">Home</a>
+      <a href="#about" data-t="navAbout">About</a>
+      <a href="#services" data-t="navServices">Services</a>
+      <a href="#gallery" data-t="navGallery">Gallery</a>
+      <a href="#contact" class="btn btn-primary btn-sm" data-t="navContact">Contact</a>
+    </nav>
+    <div style="display:flex;gap:8px;align-items:center">
+      <a class="lang-btn" id="langBtn" href="ar.html" onclick="try{localStorage.setItem('raed.lang','ar')}catch(e){}">AR</a>
+      <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="navLinks" aria-label="Menu" type="button"><span></span><span></span><span></span></button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" id="home"><div class="wrap hero-grid">
+    <div class="hero-copy reveal">
+      <span class="eyebrow" id="heroEyebrow"></span>
+      <h1 id="heroTitle"></h1>
+      <p class="lead" id="heroSub"></p>
+      <div class="hero-cta">
+        <a class="btn btn-primary wa-link" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-12.6 7.3L3 20.5l1.8-5.2A8.4 8.4 0 1 1 21 11.5z"/></svg><span data-t="waUs">WhatsApp us</span></a>
+        <a class="btn btn-ghost" href="#gallery" data-t="viewWork">View our work</a>
+      </div>
+      <ul class="pills"><li data-t="pill1"></li><li data-t="pill2"></li><li data-t="pill3"></li></ul>
+    </div>
+    <div class="hero-art reveal" aria-hidden="true"><div class="stage" id="stage"><div class="float"><div class="plate" id="plate">
+      <div class="plate-back"></div><div class="plate-mid"></div>
+      <div class="plate-front"><img data-logo alt=""></div>
+      <span class="chip chip-1" data-t="chip1"></span><span class="chip chip-2" data-t="chip2"></span><span class="chip chip-3" data-t="chip3"></span><span class="chip chip-4" data-t="chip4"></span>
+    </div></div></div></div>
+  </div></section>
+
+  <section class="section" id="about"><div class="wrap about-grid">
+    <div class="reveal"><span class="eyebrow" data-t="aboutLabel">About</span><h2 class="h2" id="aboutTitle"></h2></div>
+    <div class="about-body reveal"><div id="aboutText"></div>
+      <ul class="ticks">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span data-t="tick1"></span></li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span data-t="tick2"></span></li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span data-t="tick3"></span></li>
+      </ul>
+    </div>
+  </div></section>
+
+  <section class="section" id="services"><div class="wrap">
+    <div class="reveal"><span class="eyebrow" data-t="servicesLabel">Services</span><h2 class="h2" data-t="servicesTitle">What we do</h2><p class="lead" style="margin-top:16px" data-t="servicesLead"></p></div>
+    <div class="cards" id="servicesGrid"></div>
+  </div></section>
+
+  <section class="section" id="gallery"><div class="wrap">
+    <div class="reveal"><span class="eyebrow" data-t="galleryLabel">Gallery</span><h2 class="h2" data-t="galleryTitle">Selected work</h2><p class="lead" style="margin-top:16px" data-t="galleryLead"></p></div>
+    <div class="filters reveal" id="filters" role="group"></div>
+    <div class="masonry" id="galleryGrid"></div>
+  </div></section>
+
+  <section class="section" id="contact"><div class="wrap"><div class="contact-card reveal">
+    <span class="eyebrow" style="justify-content:center" data-t="contactLabel">Contact</span>
+    <h2 data-t="contactTitle">Let's build your brand</h2>
+    <p class="lead" id="contactMsg"></p>
+    <div class="contact-actions">
+      <a class="btn btn-primary wa-link" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-12.6 7.3L3 20.5l1.8-5.2A8.4 8.4 0 1 1 21 11.5z"/></svg><span data-t="chatWA">Chat on WhatsApp</span></a>
+      <button class="btn btn-ghost" id="contactEmailBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m3.5 7 8.5 6 8.5-6"/></svg><span data-t="sendEmail">Send an email</span></button>
+      <a class="btn btn-ghost" id="contactCvBtn" href="#" target="_blank" rel="noopener" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h4"/></svg>
+        <span data-t="cv">Resume</span>
+      </a>
+    </div>
+    <div class="contact-tiles">
+      <button class="tile" id="tileEmail" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m3.5 7 8.5 6 8.5-6"/></svg><span><small data-t="emailLabel">Email</small><b id="contactEmail"></b></span></button>
+      <a class="tile wa-link" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-12.6 7.3L3 20.5l1.8-5.2A8.4 8.4 0 1 1 21 11.5z"/></svg><span><small data-t="waLabel">WhatsApp</small><b id="contactWa"></b></span></a>
+    </div>
+  </div></div></section>
+</main>
+
+<footer class="footer"><div class="wrap footer-inner">
+  <a class="brand" href="#home" id="footerBrand" title="RAED Advertising"><img class="brand-logo" id="footerLogo" data-logo alt="RAED Advertising"></a>
+  <div class="footer-meta">
+    <button id="footerEmail" type="button" style="background:none;border:0;color:inherit;cursor:pointer;font:inherit;padding:0"></button>
+    <a class="wa-link" target="_blank" rel="noopener" id="footerWa"></a>
+  </div>
+  <span class="copy">© <span id="year"></span> RAED Advertising. All rights reserved.</span>
+</div></footer>
+
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true"><button class="lb-btn lb-close" data-lb="close" aria-label="Close" type="button">✕</button><button class="lb-btn lb-prev" data-lb="prev" aria-label="Prev" type="button">‹</button><img id="lbImg" alt=""><button class="lb-btn lb-next" data-lb="next" aria-label="Next" type="button">›</button><div class="lb-caption" id="lbCaption"></div></div>
+
+<div class="cf-modal" id="cfModal" role="dialog" aria-modal="true" aria-label="Contact form">
+  <div class="cf-inner">
+    <button class="cf-close" id="cfClose" aria-label="Close" type="button">✕</button>
+    <h3 id="cfTitle"></h3>
+    <p class="cf-sub" id="cfSub"></p>
+    <form id="cfForm" novalidate>
+      <div class="cf-field"><label for="cfName" data-t="formName"></label><input id="cfName" type="text" autocomplete="name" required maxlength="100"></div>
+      <div class="cf-field"><label for="cfEmail" data-t="formEmail"></label><input id="cfEmail" type="email" autocomplete="email" required maxlength="150"></div>
+      <div class="cf-field"><label for="cfMsg" data-t="formMsg"></label><textarea id="cfMsg" rows="5" required maxlength="2000"></textarea></div>
+      <div class="cf-actions">
+        <button class="btn btn-ghost btn-sm" type="button" id="cfCancel" data-t="cancel">Cancel</button>
+        <button class="btn btn-primary" type="submit" id="cfSubmit" data-t="formSend">Send</button>
+      </div>
+      <div class="cf-status" id="cfStatus"></div>
+    </form>
+  </div>
+</div>
+
+<div id="admin" hidden><div class="adm-wrap">
+  <div class="adm-top">
+    <div class="adm-brand"><img data-logo alt=""><span data-t="adminTitle">Admin Dashboard</span></div>
+    <div class="adm-actions">
+      <span class="adm-status" id="admStatus"></span>
+      <a class="lang-btn" id="langBtnAdmin" href="ar.html" onclick="try{localStorage.setItem('raed.lang','ar')}catch(e){}">AR</a>
+      <button class="btn btn-primary btn-sm" data-act="save" data-t="saveChanges" type="button">Save changes</button>
+      <button class="btn btn-ghost btn-sm" data-act="close" data-t="close" type="button">Close</button>
+    </div>
+  </div>
+  <div id="admBody"></div>
+</div></div>
+
+<div class="url-modal" id="urlModal"><div class="url-modal-inner">
+  <h3 data-t="addImgUrl">🔗 Add image from URL</h3>
+  <div class="field"><label for="urlInput" data-t="imgUrlOrPage"></label>
+    <input id="urlInput" type="url" placeholder="https://example.com/image.jpg" spellcheck="false" autocomplete="off">
+  </div>
+  <div id="urlPreviewWrap" style="display:none;margin-top:14px">
+    <label style="display:block;font-size:.76rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;font-weight:600" data-t="preview"></label>
+    <div class="url-preview"></div>
+    <p class="hint" id="urlPreviewInfo" style="margin-top:8px;color:var(--cyan)"></p>
+  </div>
+  <p class="hint" id="urlError" style="color:#ff9d9d;min-height:1em;margin-top:10px"></p>
+  <div class="url-modal-actions">
+    <button class="btn btn-ghost btn-sm" id="urlCancel" data-t="cancel" type="button">Cancel</button>
+    <button class="btn btn-primary btn-sm" id="urlAdd" disabled data-t="add" type="button">Add</button>
+  </div>
+</div></div>
+
+<script>window.RAED_LANG = 'en';</script>
+<script src="en.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

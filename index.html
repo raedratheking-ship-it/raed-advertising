@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>RAED Advertising | رائد للإعلان</title>
+<link rel="icon" type="image/png" href="الشعار2.png">
+<script>
+(function(){
+  try {
+    var saved = localStorage.getItem('raed.lang');
+    var browser = (navigator.language || navigator.userLanguage || 'en').toLowerCase();
+    var lang = saved || (browser.indexOf('ar') === 0 ? 'ar' : 'en');
+    location.replace(lang === 'ar' ? 'ar.html' : 'en.html');
+  } catch(e) {
+    location.replace('en.html');
+  }
+})();
+</script>
+</head>
+<body>
+<noscript>
+  <p style="text-align:center;padding:40px;font-family:sans-serif">
+    <a href="ar.html">العربية</a> · <a href="en.html">English</a>
+  </p>
+</noscript>
+</body>
+</html>
