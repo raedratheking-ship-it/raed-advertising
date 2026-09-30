@@ -688,9 +688,28 @@ async function saveAll(){
   }
 }
 
-var lc = 0, lt = null;
-$('#footerLogo').addEventListener('click', function(e){ e.preventDefault(); lc++; clearTimeout(lt); lt = setTimeout(function(){ lc = 0; }, 1200); if(lc >= 3){ lc = 0; clearTimeout(lt); W = clone(S); openAdmin(); } });
-$('#footerBrand').addEventListener('click', function(e){ if(lc > 0) e.preventDefault(); });
+/* ✅ 4 نقرات سريعة فقط لفتح لوحة الأدمن — 3 أو 5 ما يفتح */
+var clickCount = 0, clickTimer = null;
+var CLICK_WINDOW = 400;    /* مدة الانتظار بين النقرات (ms) */
+var REQUIRED_CLICKS = 4;   /* عدد النقرات المطلوب بالضبط */
+
+$('#footerLogo').addEventListener('click', function(e){
+  e.preventDefault();
+  clickCount++;
+  clearTimeout(clickTimer);
+  clickTimer = setTimeout(function(){
+    /* بعد ما يوقف المستخدم عن النقر → تحقق من العدد */
+    if(clickCount === REQUIRED_CLICKS){
+      clickCount = 0;
+      W = clone(S);
+      openAdmin();
+    } else {
+      /* 3 أو 5 أو أي عدد ثاني → تجاهل */
+      clickCount = 0;
+    }
+  }, CLICK_WINDOW);
+});
+$('#footerBrand').addEventListener('click', function(e){ if(clickCount > 0) e.preventDefault(); });
 
 if(location.hash === '#admin'){ W = clone(S); openAdmin(); }
 window.addEventListener('hashchange', function(){ if(location.hash === '#admin' && adminEl.hidden){ W = clone(S); openAdmin(); } });
