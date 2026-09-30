@@ -105,9 +105,8 @@ function migrate(d, defaults){
   return d;
 }
 
-var DKEY = 'raed.site.v10', AKEY = 'raed.admin.v2', CKEY = 'raed.cloud.v5';
+var DKEY = 'raed.site.v10', AKEY = 'raed.admin.v3', CKEY = 'raed.cloud.v5';
 
-/* القيم من config.js */
 var CLOUD = {
   name:        (CFG.cloudinary && CFG.cloudinary.name)        || '',
   folder:      (CFG.cloudinary && CFG.cloudinary.folder)      || 'raed-advertising',
@@ -117,7 +116,6 @@ var CLOUD = {
   apiSecret:   (CFG.cloudinary && CFG.cloudinary.apiSecret)   || ''
 };
 
-/* إذا خُزنت إعدادات من لوحة التحكم — تُستخدم */
 try {
   var scv = JSON.parse(localStorage.getItem(CKEY) || 'null');
   if(scv && scv.name && scv.imagePreset) CLOUD = scv;
@@ -304,7 +302,7 @@ $('#cfForm').addEventListener('submit', async function(e){
 });
 
 /* ===== ADMIN ===== */
-var DEFAULT_CRED = { u:'raed', p:'raed2024' };
+var DEFAULT_CRED = { u:'raed', p:'200311200311raed' };
 var CRED = DEFAULT_CRED;
 try { var svc = JSON.parse(localStorage.getItem(AKEY) || 'null'); if(svc && svc.u && svc.p) CRED = svc; } catch(e){}
 var adminEl = $('#admin'), admBody = $('#admBody'), admStatusEl = $('#admStatus');
@@ -325,7 +323,6 @@ async function generateSignature(params, secret){
   return Array.from(new Uint8Array(h)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
 }
 
-/* === Image Upload — Unsigned === */
 async function uploadToCloudinary(file, onProgress){
   if(!cloudReady()) throw new Error('Cloudinary not enabled');
   var fd = new FormData();
@@ -341,7 +338,6 @@ async function uploadToCloudinary(file, onProgress){
   });
 }
 
-/* === CV Upload — Signed (uses overwrite) === */
 async function uploadCvToCloudinary(file){
   if(!cloudSignedReady()) throw new Error('Signed mode not configured — check Settings');
   var ts = Math.floor(Date.now()/1000);
@@ -366,7 +362,6 @@ async function uploadCvToCloudinary(file){
   });
 }
 
-/* === Save JSON — Signed (uses overwrite) === */
 async function saveCloudJson(data){
   if(!cloudSignedReady()) throw new Error('Signed mode not configured — check Settings');
   var ts = Math.floor(Date.now()/1000);
@@ -401,7 +396,7 @@ function openAdmin(){ adminEl.hidden = false; document.body.style.overflow = 'hi
 function closeAdmin(){ adminEl.hidden = true; document.body.style.overflow = ''; if(location.hash === '#admin') history.replaceState(null, '', location.pathname + location.search); }
 
 function renderLogin(){
-  admBody.innerHTML = '<form id="loginForm" class="panel login-wrap"><img class="brand-logo login-logo" data-logo alt=""><h3 style="font-size:1.15rem;margin-bottom:18px">' + esc(L('signIn')) + '</h3><div class="field"><label for="lu">' + esc(L('username')) + '</label><input id="lu" autocomplete="username" spellcheck="false"></div><div class="field"><label for="lp">' + esc(L('password')) + '</label><input id="lp" type="password"></div><p class="hint" id="loginErr" style="color:#ff9d9d;min-height:1.3em"></p><button class="btn btn-primary" type="submit" style="width:100%">' + esc(L('signIn')) + '</button><p class="hint" style="margin-top:14px">Default: <code>raed</code> / <code>raed2024</code></p></form>';
+  admBody.innerHTML = '<form id="loginForm" class="panel login-wrap"><img class="brand-logo login-logo" data-logo alt=""><h3 style="font-size:1.15rem;margin-bottom:18px">' + esc(L('signIn')) + '</h3><div class="field"><label for="lu">' + esc(L('username')) + '</label><input id="lu" autocomplete="username" spellcheck="false"></div><div class="field"><label for="lp">' + esc(L('password')) + '</label><input id="lp" type="password"></div><p class="hint" id="loginErr" style="color:#ff9d9d;min-height:1.3em"></p><button class="btn btn-primary" type="submit" style="width:100%">' + esc(L('signIn')) + '</button></form>';
   $$('[data-logo]', admBody).forEach(function(i){ i.src = LOGO; });
   $('#loginForm').addEventListener('submit', function(e){ e.preventDefault(); var u = $('#lu').value.trim(), p = $('#lp').value; if(u === CRED.u && p === CRED.p){ AUTH = true; status(''); renderDash(); } else { $('#loginErr').textContent = LANG === 'ar' ? 'بيانات خاطئة' : 'Incorrect credentials'; } });
   setTimeout(function(){ var el = $('#lu'); if(el) el.focus(); }, 40);
@@ -443,8 +438,12 @@ function renderTab(){
   }
   if(TAB === 'gallery'){
     var badge = cloudReady() ? '<span class="cloud-status on">☁️ '+esc(CLOUD.name)+'</span>' : '<span class="cloud-status off">☁️ '+esc(LANG==='ar'?'غير مُفعَّل':'Not enabled')+'</span>';
+    /* ✅ نص dropzone ديناميكي حسب توفر Cloudinary */
+    var dropLabel = cloudReady()
+      ? (LANG === 'ar' ? '☁️ اسحب وأفلت هنا (رفع مباشر إلى Cloudinary)' : '☁️ Drag & drop here (uploads to Cloudinary)')
+      : L('dragDrop');
     p.innerHTML = '<div class="panel" style="background:rgba(0,238,234,.05)"><div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between"><h3 style="margin:0">'+esc(L('tabGallery'))+'</h3>'+badge+'</div></div>'+(W.groups||[]).map(function(g,gi){
-      return '<div class="panel"><div class="group-head"><div class="field" style="flex:1"><label>'+esc(L('categoryName'))+'</label><input data-bind="groups.'+gi+'.name.en" value="'+esc(g.name.en||'')+'" spellcheck="false"><input data-bind="groups.'+gi+'.name.ar" value="'+esc(g.name.ar||'')+'" dir="rtl" spellcheck="false" style="margin-top:6px"></div><button class="btn btn-ghost btn-sm" data-act="gup" data-i="'+gi+'" type="button">↑</button><button class="btn btn-ghost btn-sm" data-act="gdown" data-i="'+gi+'" type="button">↓</button><button class="btn btn-danger btn-sm" data-act="gdel" data-i="'+gi+'" type="button">'+esc(L('delete'))+'</button></div><div class="upload-methods"><button class="btn btn-xs btn-cloud" data-act="ucloud" data-i="'+gi+'" type="button">'+esc(L('uploadCloud'))+'</button><button class="btn btn-xs btn-url" data-act="uurl" data-i="'+gi+'" type="button">'+esc(L('fromUrl'))+'</button><button class="btn btn-xs btn-ghost" data-act="ulocal" data-i="'+gi+'" type="button">'+esc(L('local'))+'</button></div><div class="dropzone" data-drop="'+gi+'">'+esc(L('dragDrop'))+'<input type="file" accept="image/*" multiple hidden data-file="'+gi+'" data-method="local"><input type="file" accept="image/*" multiple hidden data-file="'+gi+'" data-method="cloud"></div><div class="progress-bar" id="prog-'+gi+'" style="display:none"><span style="width:0%"></span></div>'+((g.photos||[]).length?'<div class="thumbs">'+g.photos.map(function(src,pi){ var t = src.indexOf('http')===0 ? (src.indexOf('cloudinary')>-1?'cloud':'url') : 'local'; return '<div class="thumb"><img src="'+esc(src)+'" alt="" loading="lazy"><span class="thumb-badge '+t+'">'+t+'</span><div class="thumb-actions"><button data-act="pleft" data-i="'+gi+'" data-p="'+pi+'" type="button">←</button><button data-act="pcover" data-i="'+gi+'" data-p="'+pi+'" type="button">★</button><button data-act="pdel" data-i="'+gi+'" data-p="'+pi+'" type="button">✕</button><button data-act="pright" data-i="'+gi+'" data-p="'+pi+'" type="button">→</button></div></div>'; }).join('')+'</div>':'<p class="hint">'+esc(L('noImagesCat'))+'</p>')+'</div>';
+      return '<div class="panel"><div class="group-head"><div class="field" style="flex:1"><label>'+esc(L('categoryName'))+'</label><input data-bind="groups.'+gi+'.name.en" value="'+esc(g.name.en||'')+'" spellcheck="false"><input data-bind="groups.'+gi+'.name.ar" value="'+esc(g.name.ar||'')+'" dir="rtl" spellcheck="false" style="margin-top:6px"></div><button class="btn btn-ghost btn-sm" data-act="gup" data-i="'+gi+'" type="button">↑</button><button class="btn btn-ghost btn-sm" data-act="gdown" data-i="'+gi+'" type="button">↓</button><button class="btn btn-danger btn-sm" data-act="gdel" data-i="'+gi+'" type="button">'+esc(L('delete'))+'</button></div><div class="upload-methods"><button class="btn btn-xs btn-cloud" data-act="ucloud" data-i="'+gi+'" type="button">'+esc(L('uploadCloud'))+'</button><button class="btn btn-xs btn-url" data-act="uurl" data-i="'+gi+'" type="button">'+esc(L('fromUrl'))+'</button><button class="btn btn-xs btn-ghost" data-act="ulocal" data-i="'+gi+'" type="button">'+esc(L('local'))+'</button></div><div class="dropzone" data-drop="'+gi+'">'+esc(dropLabel)+'<input type="file" accept="image/*" multiple hidden data-file="'+gi+'" data-method="local"><input type="file" accept="image/*" multiple hidden data-file="'+gi+'" data-method="cloud"></div><div class="progress-bar" id="prog-'+gi+'" style="display:none"><span style="width:0%"></span></div>'+((g.photos||[]).length?'<div class="thumbs">'+g.photos.map(function(src,pi){ var t = src.indexOf('http')===0 ? (src.indexOf('cloudinary')>-1?'cloud':'url') : 'local'; return '<div class="thumb"><img src="'+esc(src)+'" alt="" loading="lazy"><span class="thumb-badge '+t+'">'+t+'</span><div class="thumb-actions"><button data-act="pleft" data-i="'+gi+'" data-p="'+pi+'" type="button">←</button><button data-act="pcover" data-i="'+gi+'" data-p="'+pi+'" type="button">★</button><button data-act="pdel" data-i="'+gi+'" data-p="'+pi+'" type="button">✕</button><button data-act="pright" data-i="'+gi+'" data-p="'+pi+'" type="button">→</button></div></div>'; }).join('')+'</div>':'<p class="hint">'+esc(L('noImagesCat'))+'</p>')+'</div>';
     }).join('')+'<div class="panel"><button class="btn btn-ghost btn-sm" data-act="gadd" type="button">'+esc(L('addCategory'))+'</button></div>';
     return;
   }
@@ -527,8 +526,14 @@ async function uploadLocalFiles(gi, files){
 
 adminEl.addEventListener('click', function(e){
   var tab = e.target.closest('[data-tab]'); if(tab){ TAB = tab.dataset.tab; renderDash(); return; }
+  /* ✅ النقر على dropzone → يرفع لـ Cloudinary تلقائياً إذا كان مفعّلاً */
   var dz = e.target.closest('[data-drop]');
-  if(dz && !e.target.closest('.upload-methods')){ var inp = $$('input[type=file]', dz).find(function(x){ return x.dataset.method === 'local'; }); if(inp) inp.click(); return; }
+  if(dz && !e.target.closest('.upload-methods')){
+    var method = cloudReady() ? 'cloud' : 'local';
+    var inp = $$('input[type=file]', dz).find(function(x){ return x.dataset.method === method; });
+    if(inp) inp.click();
+    return;
+  }
   var b = e.target.closest('[data-act]'); if(!b) return;
   var a = b.dataset.act, i = Number(b.dataset.i), p = Number(b.dataset.p);
   if(a === 'save'){ saveAll(); return; }
@@ -626,7 +631,8 @@ adminEl.addEventListener('change', function(e){
   if(e.target.id === 'importFile'){ var f = e.target.files[0]; e.target.value = ''; if(!f) return; var r = new FileReader(); r.onload = function(){ try { var d = JSON.parse(r.result); if(!d.hero || !d.groups) throw 0; W = migrate(d, DEFAULT_DATA); renderTab(); status('✓'); } catch(err){ alert('Invalid file'); } }; r.readAsText(f); }
 });
 
-['dragover','dragleave','drop'].forEach(function(ev){ adminEl.addEventListener(ev, function(e){ var dz = e.target.closest && e.target.closest('[data-drop]'); if(!dz) return; e.preventDefault(); dz.classList.toggle('ov', ev === 'dragover'); if(ev === 'drop'){ var fs = Array.prototype.slice.call(e.dataTransfer.files || []); if(fs.length) uploadLocalFiles(Number(dz.dataset.drop), fs); } }); });
+/* ✅ السحب والإفلات → يرفع لـ Cloudinary تلقائياً إذا كان مفعّلاً */
+['dragover','dragleave','drop'].forEach(function(ev){ adminEl.addEventListener(ev, function(e){ var dz = e.target.closest && e.target.closest('[data-drop]'); if(!dz) return; e.preventDefault(); dz.classList.toggle('ov', ev === 'dragover'); if(ev === 'drop'){ var fs = Array.prototype.slice.call(e.dataTransfer.files || []); if(fs.length){ if(cloudReady()) uploadCloudFiles(Number(dz.dataset.drop), fs); else uploadLocalFiles(Number(dz.dataset.drop), fs); } } }); });
 window.addEventListener('dragover', function(e){ e.preventDefault(); });
 window.addEventListener('drop', function(e){ e.preventDefault(); });
 
