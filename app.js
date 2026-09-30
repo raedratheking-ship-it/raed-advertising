@@ -314,8 +314,10 @@ function cloudSignedReady(){ return !!(CLOUD.name && CLOUD.apiKey && CLOUD.apiSe
 function cloudinaryUrl(){ return 'https://api.cloudinary.com/v1_1/' + encodeURIComponent(CLOUD.name) + '/image/upload'; }
 function cloudinaryRawUrl(){ return 'https://api.cloudinary.com/v1_1/' + encodeURIComponent(CLOUD.name) + '/raw/upload'; }
 function cloudJsonUrl(){ return 'https://res.cloudinary.com/' + CLOUD.name + '/raw/upload/raed-site-data.json'; }
+function cloudCredsUrl(){ return 'https://res.cloudinary.com/' + CLOUD.name + '/raw/upload/raed-creds.json'; }
 var CLOUD_JSON_ID = 'raed-site-data';
 var CLOUD_TEST_ID = 'raed-test-data';
+var CLOUD_CREDS_ID = 'raed-creds';
 
 async function generateSignature(params, secret){
   var keys = Object.keys(params).sort();
@@ -362,7 +364,7 @@ async function uploadCvToCloudinary(file){
   });
 }
 
-/* ✅ saveCloudJson مع إمكانية تحديد public_id مختلف للاختبار */
+/* ✅ saveCloudJson مع إمكانية تحديد public_id مخصص */
 async function saveCloudJson(data, customId){
   if(!cloudSignedReady()) throw new Error('Cloudinary keys missing');
   var pid = customId || CLOUD_JSON_ID;
@@ -406,6 +408,18 @@ async function loadCloudJson(){
     var d = await r.json();
     if(d && d.hero && d.groups && !d.test) return migrate(d, DEFAULT_DATA);
   } catch(e){ console.error('[RAED] loadCloudJson error:', e); }
+  return null;
+}
+
+/* ✅ تحميل كلمة سر الأدمن من Cloudinary */
+async function loadCloudCreds(){
+  if(!cloudSignedReady()) return null;
+  try {
+    var r = await fetch(cloudCredsUrl() + '?t=' + Date.now(), { cache: 'no-store' });
+    if(!r.ok) return null;
+    var d = await r.json();
+    if(d && d.u && d.p) return d;
+  } catch(e){ console.error('[RAED] loadCloudCreds error:', e); }
   return null;
 }
 
@@ -473,7 +487,7 @@ function renderTab(){
   if(TAB === 'settings'){
     var cs = cloudReady() ? '<span class="cloud-status on">✓ '+esc(LANG==='ar'?'مُفعَّل':'Enabled')+'</span>' : '<span class="cloud-status off">✗ '+esc(LANG==='ar'?'غير مُفعَّل':'Not enabled')+'</span>';
     var signedBadge = cloudSignedReady() ? '<span class="cloud-status on">✓ Signed</span>' : '<span class="cloud-status off">✗ Signed</span>';
-    p.innerHTML = '<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px"><h3 style="margin:0">☁️ Cloudinary</h3><div style="display:flex;gap:8px;flex-wrap:wrap">'+cs+signedBadge+'</div></div>'+'<p class="hint" style="margin-bottom:16px">'+esc(L('cloudHelp'))+'</p><div class="grid2">'+singleField(L('cloudName'),CLOUD.name,'cloud.name')+singleField(L('folder'),CLOUD.folder||'','cloud.folder')+'</div><div class="grid2">'+singleField(L('imagePreset'),CLOUD.imagePreset||'','cloud.imagePreset')+singleField(L('dataPreset'),CLOUD.dataPreset||'','cloud.dataPreset')+'</div><div class="grid2">'+singleField(L('apiKey'),CLOUD.apiKey||'','cloud.apiKey')+singleField(L('apiSecret'),CLOUD.apiSecret||'','cloud.apiSecret')+'</div><div class="rowline"><button class="btn btn-primary btn-sm" data-act="savecloud" type="button">'+esc(L('saveBtn'))+'</button><button class="btn btn-ghost btn-sm" data-act="testcloud" type="button">'+esc(L('testBtn'))+'</button><button class="btn btn-danger btn-sm" data-act="clearcloud" type="button">'+esc(L('clearBtn'))+'</button></div></div>'+'<div class="panel"><h3>'+esc(L('credsSection'))+'</h3><div class="grid2">'+singleField(L('username'),CRED.u,'cred.u')+singleField(L('password'),CRED.p,'cred.p')+'</div><button class="btn btn-primary btn-sm" data-act="savecred" type="button">'+esc(L('updateBtn'))+'</button></div>'+'<div class="panel"><h3>'+esc(L('backupSection'))+'</h3><div class="rowline"><button class="btn btn-ghost btn-sm" data-act="export" type="button">'+esc(L('exportJson'))+'</button><button class="btn btn-ghost btn-sm" data-act="import" type="button">'+esc(L('importJson'))+'</button><input type="file" accept="application/json" hidden id="importFile"><button class="btn btn-cloud btn-sm" data-act="reloadcloud" type="button">☁️ '+esc(LANG==='ar'?'إعادة تحميل من Cloudinary':'Reload from Cloud')+'</button><button class="btn btn-danger btn-sm" data-act="reset" type="button">'+esc(L('resetBtn'))+'</button></div><p class="hint">'+esc(cloudReady()?L('autoPublish'):L('noCloud'))+'</p></div>';
+    p.innerHTML = '<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px"><h3 style="margin:0">☁️ Cloudinary</h3><div style="display:flex;gap:8px;flex-wrap:wrap">'+cs+signedBadge+'</div></div>'+'<p class="hint" style="margin-bottom:16px">'+esc(L('cloudHelp'))+'</p><div class="grid2">'+singleField(L('cloudName'),CLOUD.name,'cloud.name')+singleField(L('folder'),CLOUD.folder||'','cloud.folder')+'</div><div class="grid2">'+singleField(L('imagePreset'),CLOUD.imagePreset||'','cloud.imagePreset')+singleField(L('dataPreset'),CLOUD.dataPreset||'','cloud.dataPreset')+'</div><div class="grid2">'+singleField(L('apiKey'),CLOUD.apiKey||'','cloud.apiKey')+singleField(L('apiSecret'),CLOUD.apiSecret||'','cloud.apiSecret')+'</div><div class="rowline"><button class="btn btn-primary btn-sm" data-act="savecloud" type="button">'+esc(L('saveBtn'))+'</button><button class="btn btn-ghost btn-sm" data-act="testcloud" type="button">'+esc(L('testBtn'))+'</button><button class="btn btn-danger btn-sm" data-act="clearcloud" type="button">'+esc(L('clearBtn'))+'</button></div></div>'+'<div class="panel"><h3>'+esc(L('credsSection'))+'</h3><p class="hint" style="margin-bottom:12px">'+(LANG==='ar'?'💡 عند التحديث، تُحفظ في Cloudinary وتنتقل لكل الأجهزة.':'💡 On update, saved to Cloudinary and synced across all devices.')+'</p><div class="grid2">'+singleField(L('username'),CRED.u,'cred.u')+singleField(L('password'),CRED.p,'cred.p')+'</div><button class="btn btn-primary btn-sm" data-act="savecred" type="button">'+esc(L('updateBtn'))+'</button></div>'+'<div class="panel"><h3>'+esc(L('backupSection'))+'</h3><div class="rowline"><button class="btn btn-ghost btn-sm" data-act="export" type="button">'+esc(L('exportJson'))+'</button><button class="btn btn-ghost btn-sm" data-act="import" type="button">'+esc(L('importJson'))+'</button><input type="file" accept="application/json" hidden id="importFile"><button class="btn btn-cloud btn-sm" data-act="reloadcloud" type="button">☁️ '+esc(LANG==='ar'?'إعادة تحميل من Cloudinary':'Reload from Cloud')+'</button><button class="btn btn-danger btn-sm" data-act="reset" type="button">'+esc(L('resetBtn'))+'</button></div><p class="hint">'+esc(cloudReady()?L('autoPublish'):L('noCloud'))+'</p></div>';
     return;
   }
 }
@@ -581,7 +595,33 @@ adminEl.addEventListener('click', function(e){
     fetch(testUrl, { mode:'no-cors' }).then(function(){ status('✓ Test sent — check your WhatsApp'); setTimeout(function(){ status(''); }, 4000); }).catch(function(err){ status('✗ Failed: '+err.message); setTimeout(function(){ status(''); }, 5000); });
     return;
   }
-  if(a === 'savecred'){ var u = $('#f_cred_u').value.trim(), pw = $('#f_cred_p').value; if(!u || !pw){ alert('Fill both fields'); return; } CRED = {u:u, p:pw}; try { localStorage.setItem(AKEY, JSON.stringify(CRED)); } catch(e){} status('✓'); setTimeout(function(){ status(''); }, 2000); return; }
+
+  /* ✅ حفظ كلمة السر: محلياً + Cloudinary */
+  if(a === 'savecred'){
+    var u = $('#f_cred_u').value.trim(), pw = $('#f_cred_p').value;
+    if(!u || !pw){ alert(LANG==='ar'?'عبّئ الحقلين':'Fill both fields'); return; }
+    CRED = {u:u, p:pw};
+    try { localStorage.setItem(AKEY, JSON.stringify(CRED)); } catch(e){}
+
+    if(cloudSignedReady()){
+      status('☁️ Saving credentials to cloud...');
+      saveCloudJson(CRED, CLOUD_CREDS_ID).then(function(){
+        status('✓ '+ (LANG==='ar'?'تم الحفظ على Cloudinary':'Saved globally'));
+        setTimeout(function(){ status(''); }, 3000);
+      }).catch(function(err){
+        console.error('[RAED] save creds error:', err);
+        status('⚠️ ' + (LANG==='ar'?'محلي فقط':'Local only'));
+        alert((LANG==='ar'?'⚠️ تم الحفظ محلياً فقط، فشل الرفع للسحابة:\n\n':'⚠️ Saved locally only, cloud sync failed:\n\n') + err.message);
+        setTimeout(function(){ status(''); }, 4000);
+      });
+    } else {
+      status('✓ '+ (LANG==='ar'?'محلي فقط (Cloudinary غير مهيأ)':'Local only (Cloudinary not ready)'));
+      alert(LANG==='ar'?'⚠️ تم الحفظ محلياً فقط. Cloudinary غير مهيأ.':'⚠️ Saved locally only. Cloudinary not configured.');
+      setTimeout(function(){ status(''); }, 3500);
+    }
+    return;
+  }
+
   if(a === 'savecloud'){
     var n  = $('#f_cloud_name').value.trim();
     var fo = $('#f_cloud_folder').value.trim();
@@ -615,7 +655,7 @@ adminEl.addEventListener('click', function(e){
       var results = [];
       try { var u = await uploadToCloudinary(f); results.push('✅ Images: OK'); }
       catch(err){ results.push('❌ Images: ' + err.message); }
-      /* ✅ الاختبار لا يمس ملفك الحقيقي */
+      /* ✅ الاختبار يستخدم ملف منفصل — لا يمس ملفك الحقيقي */
       if(tdp && tak && tas){
         try { await saveCloudJson({test:true,hero:{},groups:[]}, CLOUD_TEST_ID); results.push('✅ Data: OK (test file separate)'); }
         catch(err){ results.push('❌ Data: ' + err.message); }
@@ -688,9 +728,9 @@ async function saveAll(){
   }
 }
 
-/* ✅ 4 نقرات سريعة فقط لفتح لوحة الأدمن — 3 أو 5 ما يفتح */
+/* ✅ فتح لوحة الأدمن: 4 نقرات سريعة بالضبط — 3 أو 5 لا يفعل شي */
 var clickCount = 0, clickTimer = null;
-var CLICK_WINDOW = 400;    /* مدة الانتظار بين النقرات (ms) */
+var CLICK_WINDOW = 400;    /* ms بين النقرات */
 var REQUIRED_CLICKS = 4;   /* عدد النقرات المطلوب بالضبط */
 
 $('#footerLogo').addEventListener('click', function(e){
@@ -698,13 +738,11 @@ $('#footerLogo').addEventListener('click', function(e){
   clickCount++;
   clearTimeout(clickTimer);
   clickTimer = setTimeout(function(){
-    /* بعد ما يوقف المستخدم عن النقر → تحقق من العدد */
     if(clickCount === REQUIRED_CLICKS){
       clickCount = 0;
       W = clone(S);
       openAdmin();
     } else {
-      /* 3 أو 5 أو أي عدد ثاني → تجاهل */
       clickCount = 0;
     }
   }, CLICK_WINDOW);
@@ -715,6 +753,17 @@ if(location.hash === '#admin'){ W = clone(S); openAdmin(); }
 window.addEventListener('hashchange', function(){ if(location.hash === '#admin' && adminEl.hidden){ W = clone(S); openAdmin(); } });
 
 async function boot(){
+  /* 1. حمّل كلمة سر الأدمن من Cloudinary (إن وُجدت) */
+  if(cloudSignedReady()){
+    var cloudCreds = await loadCloudCreds();
+    if(cloudCreds){
+      CRED = cloudCreds;
+      try { localStorage.setItem(AKEY, JSON.stringify(CRED)); } catch(e){}
+      console.log('[RAED] Loaded credentials from Cloudinary');
+    }
+  }
+
+  /* 2. حمّل بيانات الموقع من Cloudinary */
   if(cloudReady()){
     var cloudData = await loadCloudJson();
     if(cloudData){
@@ -722,6 +771,7 @@ async function boot(){
       try { localStorage.setItem(DKEY, JSON.stringify(S)); } catch(e){}
     }
   }
+
   applyData();
   observeReveals(document);
 }
