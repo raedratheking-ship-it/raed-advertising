@@ -4,6 +4,7 @@
 var LANG = window.RAED_LANG || 'en';
 var UI = window.RAED_UI || {};
 var DEFAULT_DATA = window.RAED_DATA || {};
+var CFG = window.RAED_CONFIG || {};
 
 var $ = function(s,r){ return (r||document).querySelector(s); };
 var $$ = function(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
@@ -97,24 +98,40 @@ function migrate(d, defaults){
   if(d.contact){
     d.contact.msg = fillBilingual(typeof d.contact.msg === 'string' ? {en:d.contact.msg,ar:''} : d.contact.msg, defaults.contact && defaults.contact.msg);
     if(!d.contact.cv) d.contact.cv = '';
-    if(!d.contact.cmbot) d.contact.cmbot = '';
+    if(!d.contact.cmbot && CFG.cmbot) d.contact.cmbot = CFG.cmbot;
+    if(!d.contact.wa && CFG.whatsapp) d.contact.wa = CFG.whatsapp;
+    if(!d.contact.email && CFG.email) d.contact.email = CFG.email;
   }
   return d;
 }
 
-var DKEY = 'raed.site.v9', AKEY = 'raed.admin.v2', CKEY = 'raed.cloud.v3';
-var CLOUD = { name:'', apiKey:'', apiSecret:'', folder:'raed-advertising' };
-try { var scv = JSON.parse(localStorage.getItem(CKEY) || 'null'); if(scv && scv.name) CLOUD = scv; } catch(e){}
+var DKEY = 'raed.site.v10', AKEY = 'raed.admin.v2', CKEY = 'raed.cloud.v5';
+
+/* القيم من config.js */
+var CLOUD = {
+  name:        (CFG.cloudinary && CFG.cloudinary.name)        || '',
+  folder:      (CFG.cloudinary && CFG.cloudinary.folder)      || 'raed-advertising',
+  imagePreset: (CFG.cloudinary && CFG.cloudinary.imagePreset) || '',
+  dataPreset:  (CFG.cloudinary && CFG.cloudinary.dataPreset)  || '',
+  apiKey:      (CFG.cloudinary && CFG.cloudinary.apiKey)      || '',
+  apiSecret:   (CFG.cloudinary && CFG.cloudinary.apiSecret)   || ''
+};
+
+/* إذا خُزنت إعدادات من لوحة التحكم — تُستخدم */
+try {
+  var scv = JSON.parse(localStorage.getItem(CKEY) || 'null');
+  if(scv && scv.name && scv.imagePreset) CLOUD = scv;
+} catch(e){}
 
 var S = (function(){
   var st = null;
   try { st = JSON.parse(localStorage.getItem(DKEY) || 'null'); } catch(e){}
   if(!st){
     try {
-      var old = JSON.parse(localStorage.getItem('raed.site.v8') || 'null')
+      var old = JSON.parse(localStorage.getItem('raed.site.v9') || 'null')
+        || JSON.parse(localStorage.getItem('raed.site.v8') || 'null')
         || JSON.parse(localStorage.getItem('raed.site.v7') || 'null')
-        || JSON.parse(localStorage.getItem('raed.site.v6') || 'null')
-        || JSON.parse(localStorage.getItem('raed.site.v5') || 'null');
+        || JSON.parse(localStorage.getItem('raed.site.v6') || 'null');
       if(old && old.hero) st = old;
     } catch(e){}
   }
@@ -125,6 +142,12 @@ var S = (function(){
   if(inline.groups.every(function(g){ return !g.photos || !g.photos.length; })) seedPhotos(inline);
   return inline;
 })();
+
+if(S && S.contact){
+  if(!S.contact.cmbot && CFG.cmbot) S.contact.cmbot = CFG.cmbot;
+  if(!S.contact.wa && CFG.whatsapp) S.contact.wa = CFG.whatsapp;
+  if(!S.contact.email && CFG.email) S.contact.email = CFG.email;
+}
 
 function saveLocal(){ try { localStorage.setItem(DKEY, JSON.stringify(S)); return true; } catch(e){ return false; } }
 
@@ -143,11 +166,7 @@ function waHref(){ var num = String(S.contact.wa || '').replace(/\D/g,''); retur
 function prettyPhone(n){ n = String(n || '').replace(/\D/g,''); return '+'+n.replace(/^(\d{3})(\d{3})(\d{3})(\d+)$/,'$1 $2 $3 $4'); }
 
 function applyI18n(){
-  $$('[data-t]').forEach(function(el){
-    var k = el.getAttribute('data-t');
-    var v = L(k);
-    if(v) el.textContent = v;
-  });
+  $$('[data-t]').forEach(function(el){ var k = el.getAttribute('data-t'); var v = L(k); if(v) el.textContent = v; });
   var ct = $('#cfTitle'); if(ct) ct.textContent = L('formTitle');
   var cs = $('#cfSub'); if(cs) cs.textContent = L('formSub');
 }
@@ -197,12 +216,7 @@ function closeLightbox(){ lightbox.classList.remove('open'); document.body.style
 
 $$('[data-logo]').forEach(function(img){
   img.src = LOGO;
-  img.addEventListener('error', function(){
-    var sp = document.createElement('span');
-    sp.className = 'wordmark';
-    sp.innerHTML = 'RAED<span>.</span>';
-    if(img.parentNode) img.parentNode.replaceChild(sp, img);
-  });
+  img.addEventListener('error', function(){ var sp = document.createElement('span'); sp.className = 'wordmark'; sp.innerHTML = 'RAED<span>.</span>'; if(img.parentNode) img.parentNode.replaceChild(sp, img); });
 });
 $('#year').textContent = new Date().getFullYear();
 
@@ -276,12 +290,8 @@ $('#cfForm').addEventListener('submit', async function(e){
   if(hasCmbot){
     var r = await sendViaCallMeBot(name, email, msg);
     btn.disabled = false;
-    if(r.ok){
-      st.className = 'cf-status ok'; st.textContent = L('formOk');
-      $('#cfForm').reset(); setTimeout(closeCf, 2500);
-    } else {
-      st.className = 'cf-status err'; st.textContent = L('formErr');
-    }
+    if(r.ok){ st.className = 'cf-status ok'; st.textContent = L('formOk'); $('#cfForm').reset(); setTimeout(closeCf, 2500); }
+    else { st.className = 'cf-status err'; st.textContent = L('formErr'); }
     return;
   }
   var num = String(S.contact.wa || '').replace(/\D/g,'');
@@ -300,7 +310,8 @@ try { var svc = JSON.parse(localStorage.getItem(AKEY) || 'null'); if(svc && svc.
 var adminEl = $('#admin'), admBody = $('#admBody'), admStatusEl = $('#admStatus');
 var AUTH = false, TAB = 'content', W = null, pendingUrlGroup = null;
 function status(m){ if(admStatusEl) admStatusEl.textContent = m || ''; }
-function cloudReady(){ return !!(CLOUD.name && CLOUD.apiKey && CLOUD.apiSecret); }
+function cloudReady(){ return !!(CLOUD.name && CLOUD.imagePreset); }
+function cloudSignedReady(){ return !!(CLOUD.name && CLOUD.dataPreset && CLOUD.apiKey && CLOUD.apiSecret); }
 function cloudinaryUrl(){ return 'https://api.cloudinary.com/v1_1/' + encodeURIComponent(CLOUD.name) + '/image/upload'; }
 function cloudinaryRawUrl(){ return 'https://api.cloudinary.com/v1_1/' + encodeURIComponent(CLOUD.name) + '/raw/upload'; }
 function cloudJsonUrl(){ return 'https://res.cloudinary.com/' + CLOUD.name + '/raw/upload/raed-site-data.json'; }
@@ -314,14 +325,12 @@ async function generateSignature(params, secret){
   return Array.from(new Uint8Array(h)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
 }
 
+/* === Image Upload — Unsigned === */
 async function uploadToCloudinary(file, onProgress){
   if(!cloudReady()) throw new Error('Cloudinary not enabled');
-  var ts = Math.floor(Date.now()/1000);
-  var params = { timestamp: ts };
-  if(CLOUD.folder) params.folder = CLOUD.folder;
-  var sig = await generateSignature(params, CLOUD.apiSecret);
   var fd = new FormData();
-  fd.append('file', file); fd.append('api_key', CLOUD.apiKey); fd.append('timestamp', ts); fd.append('signature', sig);
+  fd.append('file', file);
+  fd.append('upload_preset', CLOUD.imagePreset);
   if(CLOUD.folder) fd.append('folder', CLOUD.folder);
   return new Promise(function(res, rej){
     var x = new XMLHttpRequest(); x.open('POST', cloudinaryUrl(), true);
@@ -332,16 +341,22 @@ async function uploadToCloudinary(file, onProgress){
   });
 }
 
+/* === CV Upload — Signed (uses overwrite) === */
 async function uploadCvToCloudinary(file){
-  if(!cloudReady()) throw new Error('Cloudinary not enabled');
+  if(!cloudSignedReady()) throw new Error('Signed mode not configured — check Settings');
   var ts = Math.floor(Date.now()/1000);
   var publicId = 'raed-cv';
   var params = { public_id: publicId, timestamp: ts, overwrite: 'true', invalidate: 'true' };
   if(CLOUD.folder) params.folder = CLOUD.folder;
   var sig = await generateSignature(params, CLOUD.apiSecret);
   var fd = new FormData();
-  fd.append('file', file); fd.append('api_key', CLOUD.apiKey); fd.append('timestamp', ts); fd.append('signature', sig);
-  fd.append('public_id', publicId); fd.append('overwrite', 'true'); fd.append('invalidate', 'true');
+  fd.append('file', file);
+  fd.append('api_key', CLOUD.apiKey);
+  fd.append('timestamp', ts);
+  fd.append('signature', sig);
+  fd.append('public_id', publicId);
+  fd.append('overwrite', 'true');
+  fd.append('invalidate', 'true');
   if(CLOUD.folder) fd.append('folder', CLOUD.folder);
   return new Promise(function(res, rej){
     var x = new XMLHttpRequest(); x.open('POST', cloudinaryRawUrl(), true);
@@ -351,16 +366,23 @@ async function uploadCvToCloudinary(file){
   });
 }
 
+/* === Save JSON — Signed (uses overwrite) === */
 async function saveCloudJson(data){
-  if(!cloudReady()) throw new Error('Cloudinary not enabled');
+  if(!cloudSignedReady()) throw new Error('Signed mode not configured — check Settings');
   var ts = Math.floor(Date.now()/1000);
   var params = { public_id: CLOUD_JSON_ID, timestamp: ts, overwrite: 'true', invalidate: 'true' };
+  if(CLOUD.folder) params.folder = CLOUD.folder;
   var sig = await generateSignature(params, CLOUD.apiSecret);
   var blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   var fd = new FormData();
   fd.append('file', blob, CLOUD_JSON_ID + '.json');
-  fd.append('api_key', CLOUD.apiKey); fd.append('timestamp', ts); fd.append('signature', sig);
-  fd.append('public_id', CLOUD_JSON_ID); fd.append('overwrite', 'true'); fd.append('invalidate', 'true');
+  fd.append('api_key', CLOUD.apiKey);
+  fd.append('timestamp', ts);
+  fd.append('signature', sig);
+  fd.append('public_id', CLOUD_JSON_ID);
+  fd.append('overwrite', 'true');
+  fd.append('invalidate', 'true');
+  if(CLOUD.folder) fd.append('folder', CLOUD.folder);
   return new Promise(function(res, rej){
     var x = new XMLHttpRequest(); x.open('POST', cloudinaryRawUrl(), true);
     x.onload = function(){ if(x.status >= 200 && x.status < 300){ try { var r = JSON.parse(x.responseText); res(r.secure_url || cloudJsonUrl()); } catch(e){ rej(new Error('Invalid response')); } } else { var m = 'Save failed ('+x.status+')'; try { var er = JSON.parse(x.responseText); if(er.error && er.error.message) m = er.error.message; } catch(e){} rej(new Error(m)); } };
@@ -435,7 +457,8 @@ function renderTab(){
   }
   if(TAB === 'settings'){
     var cs = cloudReady() ? '<span class="cloud-status on">✓ '+esc(LANG==='ar'?'مُفعَّل':'Enabled')+'</span>' : '<span class="cloud-status off">✗ '+esc(LANG==='ar'?'غير مُفعَّل':'Not enabled')+'</span>';
-    p.innerHTML = '<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px"><h3 style="margin:0">'+esc(L('cloudinarySection'))+'</h3>'+cs+'</div><p class="hint" style="margin-bottom:16px">'+esc(L('cloudHelp'))+'</p><div class="grid2">'+singleField(L('cloudName'),CLOUD.name,'cloud.name')+singleField(L('folder'),CLOUD.folder||'','cloud.folder')+'</div><div class="grid2">'+singleField(L('apiKey'),CLOUD.apiKey,'cloud.apiKey')+singleField(L('apiSecret'),CLOUD.apiSecret,'cloud.apiSecret')+'</div><div class="rowline"><button class="btn btn-primary btn-sm" data-act="savecloud" type="button">'+esc(L('saveBtn'))+'</button><button class="btn btn-ghost btn-sm" data-act="testcloud" type="button">'+esc(L('testBtn'))+'</button><button class="btn btn-danger btn-sm" data-act="clearcloud" type="button">'+esc(L('clearBtn'))+'</button></div></div>'+'<div class="panel"><h3>'+esc(L('credsSection'))+'</h3><div class="grid2">'+singleField(L('username'),CRED.u,'cred.u')+singleField(L('password'),CRED.p,'cred.p')+'</div><button class="btn btn-primary btn-sm" data-act="savecred" type="button">'+esc(L('updateBtn'))+'</button></div>'+'<div class="panel"><h3>'+esc(L('backupSection'))+'</h3><div class="rowline"><button class="btn btn-ghost btn-sm" data-act="export" type="button">'+esc(L('exportJson'))+'</button><button class="btn btn-ghost btn-sm" data-act="import" type="button">'+esc(L('importJson'))+'</button><input type="file" accept="application/json" hidden id="importFile"><button class="btn btn-danger btn-sm" data-act="reset" type="button">'+esc(L('resetBtn'))+'</button></div><p class="hint">'+esc(cloudReady()?L('autoPublish'):L('noCloud'))+'</p></div>';
+    var signedBadge = cloudSignedReady() ? '<span class="cloud-status on">✓ Signed</span>' : '<span class="cloud-status off">✗ Signed</span>';
+    p.innerHTML = '<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px"><h3 style="margin:0">☁️ Cloudinary</h3><div style="display:flex;gap:8px;flex-wrap:wrap">'+cs+signedBadge+'</div></div>'+'<p class="hint" style="margin-bottom:16px">'+esc(L('cloudHelp'))+'</p><div class="grid2">'+singleField(L('cloudName'),CLOUD.name,'cloud.name')+singleField(L('folder'),CLOUD.folder||'','cloud.folder')+'</div><div class="grid2">'+singleField(L('imagePreset'),CLOUD.imagePreset||'','cloud.imagePreset')+singleField(L('dataPreset'),CLOUD.dataPreset||'','cloud.dataPreset')+'</div><div class="grid2">'+singleField(L('apiKey'),CLOUD.apiKey||'','cloud.apiKey')+singleField(L('apiSecret'),CLOUD.apiSecret||'','cloud.apiSecret')+'</div><div class="rowline"><button class="btn btn-primary btn-sm" data-act="savecloud" type="button">'+esc(L('saveBtn'))+'</button><button class="btn btn-ghost btn-sm" data-act="testcloud" type="button">'+esc(L('testBtn'))+'</button><button class="btn btn-danger btn-sm" data-act="clearcloud" type="button">'+esc(L('clearBtn'))+'</button></div></div>'+'<div class="panel"><h3>'+esc(L('credsSection'))+'</h3><div class="grid2">'+singleField(L('username'),CRED.u,'cred.u')+singleField(L('password'),CRED.p,'cred.p')+'</div><button class="btn btn-primary btn-sm" data-act="savecred" type="button">'+esc(L('updateBtn'))+'</button></div>'+'<div class="panel"><h3>'+esc(L('backupSection'))+'</h3><div class="rowline"><button class="btn btn-ghost btn-sm" data-act="export" type="button">'+esc(L('exportJson'))+'</button><button class="btn btn-ghost btn-sm" data-act="import" type="button">'+esc(L('importJson'))+'</button><input type="file" accept="application/json" hidden id="importFile"><button class="btn btn-danger btn-sm" data-act="reset" type="button">'+esc(L('resetBtn'))+'</button></div><p class="hint">'+esc(cloudReady()?L('autoPublish'):L('noCloud'))+'</p></div>';
     return;
   }
 }
@@ -525,50 +548,64 @@ adminEl.addEventListener('click', function(e){
   if(a === 'pcover'){ W.groups[i].photos.unshift(W.groups[i].photos.splice(p,1)[0]); renderTab(); status('•'); return; }
   if(a === 'pleft' && p > 0){ var ar = W.groups[i].photos; ar.splice(p-1, 0, ar.splice(p,1)[0]); renderTab(); status('•'); return; }
   if(a === 'pright' && p < W.groups[i].photos.length-1){ var ar2 = W.groups[i].photos; ar2.splice(p+1, 0, ar2.splice(p,1)[0]); renderTab(); status('•'); return; }
-  if(a === 'cvcloud'){ if(!cloudReady()){ alert('Cloudinary not enabled'); return; } var fi = $('#cvFileInput'); if(fi) fi.click(); return; }
+  if(a === 'cvcloud'){ if(!cloudSignedReady()){ alert('Signed mode not configured — check Settings'); return; } var fi = $('#cvFileInput'); if(fi) fi.click(); return; }
   if(a === 'cvurl'){ var uu = prompt(LANG === 'ar' ? 'الصق رابط السيرة (PDF):' : 'Paste resume URL (PDF):'); if(!uu) return; W.contact.cv = uu.trim(); renderTab(); status('•'); return; }
   if(a === 'cvsave'){ var mv = $('#cvUrlManual'); if(!mv) return; W.contact.cv = mv.value.trim(); renderTab(); status('✓'); setTimeout(function(){ status(''); }, 2500); return; }
   if(a === 'cvdel'){ if(!confirm(L('confirmDeleteResume'))) return; W.contact.cv = ''; renderTab(); status('•'); return; }
-  if(a === 'savecmbot'){
-    var ck = $('#f_contact_cmbot'); if(!ck) return;
-    var key = ck.value.trim();
-    if(!key){ alert('Enter the API key first'); return; }
-    W.contact.cmbot = key;
-    S = clone(W); saveLocal(); applyData();
-    status('✓ API key saved — Click Save changes to sync');
-    renderTab();
-    setTimeout(function(){ status(''); }, 4000);
-    return;
-  }
+  if(a === 'savecmbot'){ var ck = $('#f_contact_cmbot'); if(!ck) return; var key = ck.value.trim(); if(!key){ alert('Enter the API key first'); return; } W.contact.cmbot = key; S = clone(W); saveLocal(); applyData(); status('✓ API key saved — Click Save changes to sync'); renderTab(); setTimeout(function(){ status(''); }, 4000); return; }
   if(a === 'testcbmot'){
-    var testKey = String(W.contact.cmbot || '').trim();
-    if(!testKey){ alert('Save the API key first'); return; }
-    var testNum = String(S.contact.wa || '').replace(/\D/g,'');
-    if(!testNum){ alert('WhatsApp number missing'); return; }
+    var testKey = String(W.contact.cmbot || '').trim(); if(!testKey){ alert('Save the API key first'); return; }
+    var testNum = String(S.contact.wa || '').replace(/\D/g,''); if(!testNum){ alert('WhatsApp number missing'); return; }
     status('⏳ Sending test...');
-    var testUrl = 'https://api.callmebot.com/whatsapp.php?phone='+encodeURIComponent(testNum)+'&text='+encodeURIComponent('✅ Test from RAED Advertising admin — CallMeBot is working!')+'&apikey='+encodeURIComponent(testKey);
+    var testUrl = 'https://api.callmebot.com/whatsapp.php?phone='+encodeURIComponent(testNum)+'&text='+encodeURIComponent('✅ Test from RAED Advertising — CallMeBot works!')+'&apikey='+encodeURIComponent(testKey);
     fetch(testUrl, { mode:'no-cors' }).then(function(){ status('✓ Test sent — check your WhatsApp'); setTimeout(function(){ status(''); }, 4000); }).catch(function(err){ status('✗ Failed: '+err.message); setTimeout(function(){ status(''); }, 5000); });
     return;
   }
   if(a === 'savecred'){ var u = $('#f_cred_u').value.trim(), pw = $('#f_cred_p').value; if(!u || !pw){ alert('Fill both fields'); return; } CRED = {u:u, p:pw}; try { localStorage.setItem(AKEY, JSON.stringify(CRED)); } catch(e){} status('✓'); setTimeout(function(){ status(''); }, 2000); return; }
-  if(a === 'savecloud'){ var n = $('#f_cloud_name').value.trim(), ak = $('#f_cloud_apiKey').value.trim(), as = $('#f_cloud_apiSecret').value.trim(), fo = $('#f_cloud_folder').value.trim(); if(!n || !ak || !as){ alert('Fill Cloud Name, API Key, API Secret'); return; } CLOUD = {name:n, apiKey:ak, apiSecret:as, folder:fo}; try { localStorage.setItem(CKEY, JSON.stringify(CLOUD)); } catch(e){} status('✓'); renderTab(); setTimeout(function(){ status(''); }, 2400); return; }
+  if(a === 'savecloud'){
+    var n  = $('#f_cloud_name').value.trim();
+    var fo = $('#f_cloud_folder').value.trim();
+    var ip = $('#f_cloud_imagePreset').value.trim();
+    var dp = $('#f_cloud_dataPreset').value.trim();
+    var ak = $('#f_cloud_apiKey').value.trim();
+    var as = $('#f_cloud_apiSecret').value.trim();
+    if(!n || !ip){ alert('Fill Cloud Name and Image Preset'); return; }
+    CLOUD = {name:n, folder:fo, imagePreset:ip, dataPreset:dp, apiKey:ak, apiSecret:as};
+    try { localStorage.setItem(CKEY, JSON.stringify(CLOUD)); } catch(e){}
+    status('✓'); renderTab(); setTimeout(function(){ status(''); }, 2400);
+    return;
+  }
   if(a === 'testcloud'){
-    var tn = $('#f_cloud_name').value.trim(), tk = $('#f_cloud_apiKey').value.trim(), ts = $('#f_cloud_apiSecret').value.trim(), tf = $('#f_cloud_folder').value.trim();
-    if(!tn || !tk || !ts){ alert('Fill credentials first'); return; }
-    status('⏳');
+    var tn  = $('#f_cloud_name').value.trim();
+    var tf  = $('#f_cloud_folder').value.trim();
+    var tip = $('#f_cloud_imagePreset').value.trim();
+    var tdp = $('#f_cloud_dataPreset').value.trim();
+    var tak = $('#f_cloud_apiKey').value.trim();
+    var tas = $('#f_cloud_apiSecret').value.trim();
+    if(!tn || !tip){ alert('Fill Cloud Name and Image Preset'); return; }
+    status('⏳ Testing...');
     var cv = document.createElement('canvas'); cv.width = 200; cv.height = 200;
     var cx = cv.getContext('2d'); var gr = cx.createLinearGradient(0,0,200,200); gr.addColorStop(0,'#04091c'); gr.addColorStop(1,'#00eeea'); cx.fillStyle = gr; cx.fillRect(0,0,200,200);
     cx.fillStyle = '#fff'; cx.font = 'bold 28px Arial'; cx.textAlign = 'center'; cx.textBaseline = 'middle'; cx.fillText('RAED', 100, 100);
     cv.toBlob(async function(blob){
       if(!blob){ status('✗'); return; }
       var f = new File([blob], 'test.jpg', { type:'image/jpeg' });
-      var oc = CLOUD; CLOUD = {name:tn, apiKey:tk, apiSecret:ts, folder:tf};
-      try { var u = await uploadToCloudinary(f); status('✓ OK'); alert('✅ Cloudinary works!\n\n'+u); CLOUD = oc; setTimeout(function(){ status(''); }, 3000); }
-      catch(err){ status('✗ '+err.message); alert('❌ Failed:\n\n'+err.message); CLOUD = oc; }
+      var oc = CLOUD;
+      CLOUD = {name:tn, folder:tf, imagePreset:tip, dataPreset:tdp, apiKey:tak, apiSecret:tas};
+      var results = [];
+      try { var u = await uploadToCloudinary(f); results.push('✅ Images: OK'); }
+      catch(err){ results.push('❌ Images: ' + err.message); }
+      if(tdp && tak && tas){
+        try { await saveCloudJson({test:true,hero:{},groups:[]}); results.push('✅ Data: OK'); }
+        catch(err){ results.push('❌ Data: ' + err.message); }
+      } else { results.push('⚠️ Data: skipped (missing keys)'); }
+      alert(results.join('\n'));
+      status(results[0].indexOf('✅') === 0 ? '✓ Images OK' : '✗ Failed');
+      CLOUD = oc; setTimeout(function(){ status(''); }, 4000);
     }, 'image/jpeg', .9);
     return;
   }
-  if(a === 'clearcloud'){ if(!confirm(L('confirmClearCloud'))) return; CLOUD = {name:'',apiKey:'',apiSecret:'',folder:''}; try { localStorage.removeItem(CKEY); } catch(e){} renderTab(); status('✓'); setTimeout(function(){ status(''); }, 2000); return; }
+  if(a === 'clearcloud'){ if(!confirm(L('confirmClearCloud'))) return; CLOUD = {name:'',folder:'raed-advertising',imagePreset:'',dataPreset:'',apiKey:'',apiSecret:''}; try { localStorage.removeItem(CKEY); } catch(e){} renderTab(); status('✓'); setTimeout(function(){ status(''); }, 2000); return; }
   if(a === 'export'){ var bl = new Blob([JSON.stringify(W,null,2)],{type:'application/json'}); var lk = document.createElement('a'); lk.href = URL.createObjectURL(bl); lk.download = 'raed-data.json'; document.body.appendChild(lk); lk.click(); lk.remove(); setTimeout(function(){ URL.revokeObjectURL(lk.href); }, 5000); return; }
   if(a === 'import'){ $('#importFile').click(); return; }
   if(a === 'reset'){ if(!confirm(L('confirmReset'))) return; localStorage.removeItem(DKEY); location.reload(); return; }
@@ -577,7 +614,13 @@ adminEl.addEventListener('click', function(e){
 adminEl.addEventListener('input', function(e){ var b = e.target.dataset.bind; if(!b || !W) return; var k = b.split('.'); var o = W; for(var ii=0;ii<k.length-1;ii++) o = o[k[ii]]; o[k[k.length-1]] = e.target.value; status(LANG === 'ar' ? 'تغييرات غير محفوظة' : 'Unsaved changes'); });
 
 adminEl.addEventListener('change', function(e){
-  if(e.target.id === 'cvFileInput'){ var cf = e.target.files[0]; e.target.value = ''; if(!cf) return; if(!cloudReady()){ alert('Cloudinary not enabled'); return; } status('☁️ ...'); uploadCvToCloudinary(cf).then(function(url){ W.contact.cv = url; renderTab(); status('✓ '+L('cv')); setTimeout(function(){ status(''); }, 3500); }).catch(function(err){ status('✗ '+err.message); alert('Failed:\n\n'+err.message); }); return; }
+  if(e.target.id === 'cvFileInput'){
+    var cf = e.target.files[0]; e.target.value = ''; if(!cf) return;
+    if(!cloudSignedReady()){ alert('Signed mode not configured — check Settings'); return; }
+    status('☁️ Uploading CV...');
+    uploadCvToCloudinary(cf).then(function(url){ W.contact.cv = url; renderTab(); status('✓ '+L('cv')); setTimeout(function(){ status(''); }, 3500); }).catch(function(err){ status('✗ '+err.message); alert('Failed:\n\n'+err.message); });
+    return;
+  }
   var fi = e.target.dataset.file;
   if(fi !== undefined){ var m = e.target.dataset.method || 'local', fs = Array.prototype.slice.call(e.target.files || []); e.target.value = ''; if(!fs.length) return; if(m === 'cloud') uploadCloudFiles(Number(fi), fs); else uploadLocalFiles(Number(fi), fs); return; }
   if(e.target.id === 'importFile'){ var f = e.target.files[0]; e.target.value = ''; if(!f) return; var r = new FileReader(); r.onload = function(){ try { var d = JSON.parse(r.result); if(!d.hero || !d.groups) throw 0; W = migrate(d, DEFAULT_DATA); renderTab(); status('✓'); } catch(err){ alert('Invalid file'); } }; r.readAsText(f); }
@@ -589,7 +632,11 @@ window.addEventListener('drop', function(e){ e.preventDefault(); });
 
 async function saveAll(){
   if(!W) return; S = clone(W); saveLocal(); applyData();
-  if(cloudReady()){ status('☁️ ...'); try { await saveCloudJson(S); status('✓ '+L('saveChanges')); setTimeout(function(){ status(''); }, 3500); } catch(e){ status('⚠️ '+e.message); setTimeout(function(){ status(''); }, 5000); } }
+  if(cloudSignedReady()){
+    status('☁️ Saving to cloud...');
+    try { await saveCloudJson(S); status('✓ '+L('saveChanges')); setTimeout(function(){ status(''); }, 3500); }
+    catch(e){ status('⚠️ '+e.message); setTimeout(function(){ status(''); }, 5000); }
+  }
   else { status('✓ ('+(LANG === 'ar' ? 'محلي' : 'local')+')'); setTimeout(function(){ status(''); }, 3500); }
 }
 

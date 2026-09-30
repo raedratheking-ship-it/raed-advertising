@@ -28,8 +28,9 @@ window.RAED_UI = {
   cvSection:"📄 Resume (CV)",cvHelp:"Upload a resume (PDF preferred). The Resume button will appear on the contact section automatically.",
   cvUpload:"☁️ Upload resume to Cloudinary",cvUrl:"🔗 Add by URL",cvManual:"Or paste a direct URL",cvSaveUrl:"Save URL",
   cvCurrent:"📄 Current resume — click to preview",cvDelete:"Delete resume",cvNone:"No resume uploaded yet.",
-  cloudinarySection:"☁️ Cloudinary",cloudHelp:"Enter your Cloudinary credentials. Make sure the Upload Preset is Signed.",
-  cloudName:"Cloud Name",folder:"Folder (optional)",apiKey:"API Key",apiSecret:"API Secret",
+  cloudinarySection:"☁️ Cloudinary",cloudHelp:"Enter your Cloudinary credentials. Images use Unsigned (safe), data uses Signed (needs keys).",
+  cloudName:"Cloud Name",folder:"Folder",imagePreset:"Image Preset (Unsigned)",dataPreset:"Data Preset (Signed)",
+  apiKey:"API Key",apiSecret:"API Secret",
   saveBtn:"Save",testBtn:"Test connection",clearBtn:"Clear",
   credsSection:"Admin credentials",updateBtn:"Update",backupSection:"Backup",
   exportJson:"Export JSON",importJson:"Import JSON",resetBtn:"Reset",
@@ -55,7 +56,6 @@ window.RAED_UI = {
   cmbotImportant:"⚠️ After saving the API key below, click Save changes in the top bar to activate it."
 };
 
-/* Same bilingual content data */
 window.RAED_DATA = {
   "hero":{
     "eyebrow":{"en":"Advertising & Branding Studio","ar":"استوديو إعلان وهوية بصرية"},

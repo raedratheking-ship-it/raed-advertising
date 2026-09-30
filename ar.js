@@ -28,8 +28,9 @@ window.RAED_UI = {
   cvSection:"📄 السيرة الذاتية",cvHelp:"ارفع السيرة الذاتية (PDF مفضّل). سيظهر زر سيرة ذاتية في قسم التواصل تلقائياً.",
   cvUpload:"☁️ رفع السيرة على Cloudinary",cvUrl:"🔗 إضافة برابط",cvManual:"أو الصق رابطاً مباشراً",cvSaveUrl:"حفظ الرابط",
   cvCurrent:"📄 السيرة الحالية — اضغط للمعاينة",cvDelete:"حذف السيرة",cvNone:"لا توجد سيرة مرفوعة بعد.",
-  cloudinarySection:"☁️ Cloudinary",cloudHelp:"أدخل بيانات Cloudinary. تأكد أن Preset من نوع Signed.",
-  cloudName:"Cloud Name",folder:"المجلد (اختياري)",apiKey:"API Key",apiSecret:"API Secret",
+  cloudinarySection:"☁️ Cloudinary",cloudHelp:"أدخل بيانات Cloudinary. الصور تُرفع بشكل آمن (Unsigned) والبيانات تحتاج مفاتيح (Signed).",
+  cloudName:"Cloud Name",folder:"المجلد",imagePreset:"Preset الصور (Unsigned)",dataPreset:"Preset البيانات (Signed)",
+  apiKey:"API Key",apiSecret:"API Secret",
   saveBtn:"حفظ",testBtn:"اختبار الاتصال",clearBtn:"مسح",
   credsSection:"بيانات الدخول",updateBtn:"تحديث",backupSection:"النسخ الاحتياطي",
   exportJson:"تصدير JSON",importJson:"استيراد JSON",resetBtn:"إعادة ضبط",
@@ -38,7 +39,7 @@ window.RAED_UI = {
   preview:"معاينة",cancel:"إلغاء",add:"إضافة",
   searching:"جاري البحث عن الصورة…",directLink:"✓ رابط مباشر",extractedFromPage:"✓ تم استخراجها من الصفحة",
   notFound:"لم يتم العثور على صورة",enterUrl:"أدخل رابطاً",badUrl:"رابط غير صالح",
-  confirmDelete:"هل أنت متأكد؟",confirmDeleteCategory:"حذف القسم وكل صوره?",
+  confirmDelete:"هل أنت متأكد؟",confirmDeleteCategory:"حذف القسم وكل صوره؟",
   confirmDeleteResume:"حذف السيرة الذاتية؟",confirmClearCloud:"مسح إعدادات Cloudinary؟",
   confirmReset:"إعادة ضبط شاملة؟ سيتم حذف كل المحتوى والإعدادات.",
   formTitle:"أرسل لنا رسالة",formSub:"نرد بأسرع وقت ممكن — عادةً خلال ساعات قليلة.",
@@ -55,7 +56,6 @@ window.RAED_UI = {
   cmbotImportant:"⚠️ بعد حفظ الـ API Key، اضغط Save changes في الشريط العلوي لتفعيله."
 };
 
-/* Content data (bilingual) - shared between both pages */
 window.RAED_DATA = {
   "hero":{
     "eyebrow":{"en":"Advertising & Branding Studio","ar":"استوديو إعلان وهوية بصرية"},
