@@ -24,14 +24,28 @@ function T(o){
   return o.en || o.ar || '';
 }
 
-/* ✅ تحسين روابط Cloudinary تلقائياً */
+/* ✅ تحسين روابط Cloudinary + كشف base64 */
 function optimizeCloudUrl(url, width){
   if(!url || typeof url !== 'string') return url;
+  if(url.indexOf('data:') === 0) return url;
   if(url.indexOf('cloudinary.com') === -1) return url;
   if(url.indexOf('/image/upload/') === -1) return url;
-  if(url.indexOf('/f_auto') > -1 || url.indexOf('/q_auto') > -1) return url;
-  var w = width || 800;
-  return url.replace('/image/upload/', '/image/upload/f_auto,q_auto,w_' + w + ',c_limit,dpr_auto/');
+  if(url.indexOf('/f_auto') > -1) return url;
+  var w = width || 700;
+  return url.replace('/image/upload/', '/image/upload/f_auto,q_auto:good,w_' + w + ',c_limit/');
+}
+
+/* ✅ كشف الصور base64 */
+function hasBase64Photos(data){
+  if(!data || !data.groups) return 0;
+  var count = 0;
+  data.groups.forEach(function(g){
+    (g.photos || []).forEach(function(p){
+      var src = typeof p === 'string' ? p : (p && p.src);
+      if(src && src.indexOf('data:') === 0) count++;
+    });
+  });
+  return count;
 }
 
 function ph(label,h,seed){
@@ -246,13 +260,12 @@ function renderFilters(){
   $('#filters').innerHTML = h;
 }
 
-/* ✅ معرض محسّن: صور بأحجام مناسبة + Cloudinary transformations */
 function renderGallery(){
   var items = galleryItems(), grid = $('#galleryGrid');
   if(!items.length){ grid.innerHTML = '<div class="empty">'+esc(L('noImages'))+'</div>'; return; }
 
   var vw = window.innerWidth || 1200;
-  var thumbW = vw < 560 ? 500 : (vw < 900 ? 700 : 900);
+  var thumbW = vw < 560 ? 400 : (vw < 900 ? 600 : 800);
 
   grid.innerHTML = items.map(function(it,i){
     var hasDesc = it.desc && (it.desc.en || it.desc.ar);
@@ -260,7 +273,9 @@ function renderGallery(){
     var displayText = hasDesc ? T(it.desc) : it.group;
     var linkIndicator = hasLink ? ' <span style="color:var(--cyan)">🔗</span>' : '';
     var optSrc = optimizeCloudUrl(it.src, thumbW);
-    return '<figure class="gitem reveal" data-index="'+i+'" tabindex="0" role="button"><img src="'+esc(optSrc)+'" alt="'+esc(displayText)+'" loading="lazy" decoding="async"><figcaption>'+esc(displayText)+linkIndicator+'</figcaption></figure>';
+    var lazyAttr = i < 3 ? 'eager' : 'lazy';
+    var fetchPrio = i < 3 ? ' fetchpriority="high"' : '';
+    return '<figure class="gitem reveal" data-index="'+i+'" tabindex="0" role="button"><img src="'+esc(optSrc)+'" alt="'+esc(displayText)+'" loading="'+lazyAttr+'" decoding="async"'+fetchPrio+'><figcaption>'+esc(displayText)+linkIndicator+'</figcaption></figure>';
   }).join('');
   observeReveals(grid);
 }
@@ -269,8 +284,7 @@ var lightbox = $('#lightbox'), lastFocus = null;
 function openLightbox(i){ lbItems = galleryItems(); if(!lbItems.length) return; lbIndex = (i + lbItems.length) % lbItems.length; updateLightbox(); lastFocus = document.activeElement; lightbox.classList.add('open'); document.body.style.overflow = 'hidden'; var c = $('.lb-close'); if(c) c.focus(); }
 function updateLightbox(){
   var it = lbItems[lbIndex];
-  /* ✅ نسخة كبيرة محسّنة للـ lightbox */
-  var bigSrc = optimizeCloudUrl(it.src, 1600);
+  var bigSrc = optimizeCloudUrl(it.src, 1200);
   $('#lbImg').src = bigSrc;
   $('#lbImg').alt = it.group;
   var cap = it.group + ' · ' + (lbIndex+1) + '/' + lbItems.length;
@@ -495,6 +509,41 @@ async function loadCloudCreds(){
   return null;
 }
 
+/* ✅ استعادة كل الصور من Cloudinary Admin API */
+async function recoverImagesFromCloudinary(){
+  if(!cloudSignedReady()) throw new Error('Cloudinary keys missing');
+  var allResources = [];
+  var nextCursor = null;
+  var maxPages = 20; /* حد أقصى للحماية */
+
+  do {
+    var url = 'https://api.cloudinary.com/v1_1/' + encodeURIComponent(CLOUD.name) + '/resources/image/upload?max_results=500';
+    if(CLOUD.folder) url += '&prefix=' + encodeURIComponent(CLOUD.folder) + '/';
+    if(nextCursor) url += '&next_cursor=' + encodeURIComponent(nextCursor);
+
+    var auth = btoa(CLOUD.apiKey + ':' + CLOUD.apiSecret);
+    var r = await fetch(url, {
+      headers: { 'Authorization': 'Basic ' + auth }
+    });
+
+    if(!r.ok){
+      var errText = await r.text();
+      var errMsg = 'HTTP ' + r.status;
+      try { var er = JSON.parse(errText); if(er.error && er.error.message) errMsg = er.error.message; } catch(e){}
+      throw new Error(errMsg);
+    }
+
+    var data = await r.json();
+    if(data.resources && data.resources.length){
+      allResources = allResources.concat(data.resources);
+    }
+    nextCursor = data.next_cursor || null;
+    maxPages--;
+  } while(nextCursor && maxPages > 0);
+
+  return allResources;
+}
+
 function openAdmin(){ adminEl.hidden = false; document.body.style.overflow = 'hidden'; status(''); if(AUTH) renderDash(); else renderLogin(); adminEl.scrollTop = 0; }
 function closeAdmin(){ adminEl.hidden = true; document.body.style.overflow = ''; if(location.hash === '#admin') history.replaceState(null, '', location.pathname + location.search); }
 
@@ -558,21 +607,24 @@ function renderTab(){
     var dropLabel = cloudReady()
       ? (LANG === 'ar' ? '☁️ اسحب وأفلت هنا (رفع مباشر إلى Cloudinary)' : '☁️ Drag & drop here (uploads to Cloudinary)')
       : L('dragDrop');
-    p.innerHTML = '<div class="panel" style="background:rgba(0,238,234,.05)"><div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between"><h3 style="margin:0">'+esc(L('tabGallery'))+'</h3>'+badge+'</div><p class="hint" style="margin-top:8px">💡 '+(LANG==='ar'?'اضغط ✎ تحت أي صورة لإضافة وصف ورابط.':'Click ✎ on any image to add description & link.')+'</p></div>'+(W.groups||[]).map(function(g,gi){
+    var base64Count = hasBase64Photos(W);
+    var warnBanner = base64Count > 0
+      ? '<div class="panel" style="background:rgba(255,193,7,.08);border:1px solid rgba(255,193,7,.4)"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span style="font-size:1.3rem">⚠️</span><div style="flex:1"><b style="color:#ffd966">' + (LANG==='ar'?'يوجد '+base64Count+' صورة محلية (base64)':'You have '+base64Count+' local base64 image(s)') + '</b><p class="hint" style="margin-top:4px;color:#ffd966">' + (LANG==='ar'?'هذي الصور تبطئ الموقع بشكل كبير. احذفها وارفعها من جديد عبر Cloudinary.':'These images slow down the site significantly. Delete them and re-upload via Cloudinary.') + '</p></div></div></div>'
+      : '';
+    p.innerHTML = warnBanner + '<div class="panel" style="background:rgba(0,238,234,.05)"><div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between"><h3 style="margin:0">'+esc(L('tabGallery'))+'</h3>'+badge+'</div><p class="hint" style="margin-top:8px">💡 '+(LANG==='ar'?'اضغط ✎ تحت أي صورة لإضافة وصف ورابط.':'Click ✎ on any image to add description & link.')+'</p></div>'+(W.groups||[]).map(function(g,gi){
       var thumbs = (g.photos||[]).map(function(photo,pi){
         var obj = typeof photo === 'string' ? {src:photo, desc:{en:'',ar:''}, link:''} : photo;
         var src = obj.src;
         var hasDesc = obj.desc && (obj.desc.en || obj.desc.ar);
         var hasLink = obj.link && obj.link.trim();
-        var t = src.indexOf('http')===0 ? (src.indexOf('cloudinary')>-1?'cloud':'url') : 'local';
+        var t = src.indexOf('data:') === 0 ? 'local' : (src.indexOf('http')===0 ? (src.indexOf('cloudinary')>-1?'cloud':'url') : 'local');
         var ind = (hasDesc ? '📝' : '') + (hasLink ? '🔗' : '');
         var indBadge = ind ? '<span class="thumb-badge" style="inset-inline-start:auto;inset-inline-end:5px;top:5px;background:rgba(0,238,234,.9);color:#02141a">'+ind+'</span>' : '';
-        /* ✅ استخدم صورة مصغّرة محسّنة في لوحة الأدمن */
-        var adminThumb = optimizeCloudUrl(src, 300);
+        var adminThumb = optimizeCloudUrl(src, 200);
         return '<div class="thumb"><img src="'+esc(adminThumb)+'" alt="" loading="lazy"><span class="thumb-badge '+t+'">'+t+'</span>'+indBadge+'<div class="thumb-actions"><button data-act="pleft" data-i="'+gi+'" data-p="'+pi+'" type="button">←</button><button data-act="pedit" data-i="'+gi+'" data-p="'+pi+'" type="button" title="'+(LANG==='ar'?'تعديل الوصف والرابط':'Edit description & link')+'">✎</button><button data-act="pcover" data-i="'+gi+'" data-p="'+pi+'" type="button">★</button><button data-act="pdel" data-i="'+gi+'" data-p="'+pi+'" type="button">✕</button><button data-act="pright" data-i="'+gi+'" data-p="'+pi+'" type="button">→</button></div></div>';
       }).join('');
       return '<div class="panel"><div class="group-head"><div class="field" style="flex:1"><label>'+esc(L('categoryName'))+'</label><input data-bind="groups.'+gi+'.name.en" value="'+esc(g.name.en||'')+'" spellcheck="false"><input data-bind="groups.'+gi+'.name.ar" value="'+esc(g.name.ar||'')+'" dir="rtl" spellcheck="false" style="margin-top:6px"></div><button class="btn btn-ghost btn-sm" data-act="gup" data-i="'+gi+'" type="button">↑</button><button class="btn btn-ghost btn-sm" data-act="gdown" data-i="'+gi+'" type="button">↓</button><button class="btn btn-danger btn-sm" data-act="gdel" data-i="'+gi+'" type="button">'+esc(L('delete'))+'</button></div><div class="upload-methods"><button class="btn btn-xs btn-cloud" data-act="ucloud" data-i="'+gi+'" type="button">'+esc(L('uploadCloud'))+'</button><button class="btn btn-xs btn-url" data-act="uurl" data-i="'+gi+'" type="button">'+esc(L('fromUrl'))+'</button><button class="btn btn-xs btn-ghost" data-act="ulocal" data-i="'+gi+'" type="button">'+esc(L('local'))+'</button></div><div class="dropzone" data-drop="'+gi+'">'+esc(dropLabel)+'<input type="file" accept="image/*" multiple hidden data-file="'+gi+'" data-method="local"><input type="file" accept="image/*" multiple hidden data-file="'+gi+'" data-method="cloud"></div><div class="progress-bar" id="prog-'+gi+'" style="display:none"><span style="width:0%"></span></div>'+((g.photos||[]).length?'<div class="thumbs">'+thumbs+'</div>':'<p class="hint">'+esc(L('noImagesCat'))+'</p>')+'</div>';
-    }).join('')+'<div class="panel"><button class="btn btn-ghost btn-sm" data-act="gadd" type="button">'+esc(L('addCategory'))+'</button></div>';
+    }).join('')+'<div class="panel"><div class="rowline"><button class="btn btn-ghost btn-sm" data-act="gadd" type="button">'+esc(L('addCategory'))+'</button><button class="btn btn-cloud btn-sm" data-act="recovercloud" type="button">🔄 '+esc(LANG==='ar'?'استعادة الصور من Cloudinary':'Recover from Cloudinary')+'</button></div><p class="hint" style="margin-top:10px">💡 '+(LANG==='ar'?'يستخدم هذا الزر Cloudinary API لجلب كل صورك تلقائياً بدل رفعها يدوياً.':'This button uses Cloudinary API to fetch all your images automatically instead of re-uploading them.')+'</p></div>';
     return;
   }
   if(TAB === 'contact'){
@@ -784,6 +836,79 @@ adminEl.addEventListener('click', async function(e){
     return;
   }
 
+  /* ✅ استعادة الصور من Cloudinary */
+  if(a === 'recovercloud'){
+    if(!cloudSignedReady()){ alert(LANG==='ar'?'Cloudinary غير مهيأ':'Cloudinary not configured'); return; }
+    if(!confirm(LANG==='ar'?'سيتم استرجاع كل الصور من Cloudinary وإضافتها للموقع. متابعة؟':'This will fetch all images from Cloudinary and add them to the site. Continue?')) return;
+    status('⏳ ' + (LANG==='ar'?'جاري استرجاع الصور...':'Recovering images...'));
+    try {
+      var resources = await recoverImagesFromCloudinary();
+      if(!resources.length){
+        status('⚠️ ' + (LANG==='ar'?'ما لقيت صور':'No images found'));
+        alert(LANG==='ar'?'ما لقيت أي صور في مجلد Cloudinary.': 'No images found in Cloudinary folder.');
+        setTimeout(function(){ status(''); }, 4000);
+        return;
+      }
+
+      /* تجميع الصور حسب المجلد الفرعي */
+      var groupsMap = {};
+      resources.forEach(function(res){
+        var pid = res.public_id || '';
+        var parts = pid.split('/');
+        if(CLOUD.folder && parts[0] === CLOUD.folder) parts.shift();
+        var sub = parts.length > 1 ? parts[0] : '_recovered';
+        if(!groupsMap[sub]) groupsMap[sub] = [];
+        groupsMap[sub].push(res.secure_url);
+      });
+
+      var totalAdded = 0;
+      var newGroups = 0;
+
+      Object.keys(groupsMap).forEach(function(subName){
+        var urls = groupsMap[subName];
+        /* ابحث عن مجموعة موجودة بنفس الاسم */
+        var existing = (W.groups || []).find(function(g){
+          var n = (typeof g.name === 'string' ? g.name : (g.name && g.name.en) || '').toLowerCase();
+          return n === subName.toLowerCase();
+        });
+        if(existing){
+          var existingSrcs = {};
+          (existing.photos || []).forEach(function(p){
+            var s = typeof p === 'string' ? p : (p && p.src);
+            if(s) existingSrcs[s] = true;
+          });
+          urls.forEach(function(u){
+            if(!existingSrcs[u]){
+              existing.photos.push({ src: u, desc: {en:'',ar:''}, link:'' });
+              totalAdded++;
+            }
+          });
+        } else {
+          W.groups.push({
+            id: 'g-rec-' + Date.now() + '-' + Math.random().toString(36).slice(2,6),
+            name: { en: subName, ar: subName },
+            photos: urls.map(function(u){ return { src: u, desc: {en:'',ar:''}, link:'' }; })
+          });
+          totalAdded += urls.length;
+          newGroups++;
+        }
+      });
+
+      renderTab();
+      status('✓ ' + (LANG==='ar'?'تم استرجاع ' + totalAdded + ' صورة':'Recovered ' + totalAdded + ' image(s)'));
+      alert((LANG==='ar'
+        ? '✅ تم استرجاع ' + totalAdded + ' صورة من Cloudinary\n📁 ' + newGroups + ' مجموعة جديدة\n\n⚠️ لا تنسى: اضغط "حفظ التغييرات"'
+        : '✅ Recovered ' + totalAdded + ' image(s) from Cloudinary\n📁 ' + newGroups + ' new group(s)\n\n⚠️ Don\'t forget: Save changes'));
+      setTimeout(function(){ status(''); }, 5000);
+    } catch(err){
+      console.error('[RAED] recover error:', err);
+      status('✗ ' + err.message);
+      alert((LANG==='ar'?'❌ فشل الاسترجاع:\n\n':'❌ Recovery failed:\n\n') + err.message);
+      setTimeout(function(){ status(''); }, 5000);
+    }
+    return;
+  }
+
   if(a === 'savecloud'){
     var n  = $('#f_cloud_name').value.trim();
     var fo = $('#f_cloud_folder').value.trim();
@@ -888,7 +1013,7 @@ async function saveAll(){
   }
 }
 
-/* فتح لوحة الأدمن: 4 نقرات سريعة */
+/* 4 نقرات سريعة */
 var clickCount = 0, clickTimer = null;
 var CLICK_WINDOW = 400;
 var REQUIRED_CLICKS = 4;
@@ -912,13 +1037,15 @@ $('#footerBrand').addEventListener('click', function(e){ if(clickCount > 0) e.pr
 if(location.hash === '#admin'){ W = clone(S); openAdmin(); }
 window.addEventListener('hashchange', function(){ if(location.hash === '#admin' && adminEl.hidden){ W = clone(S); openAdmin(); } });
 
-/* ✅ boot غير مُعطِّل — اعرض فوراً ثم زامن في الخلفية */
 function boot(){
-  /* 1. اعرض الصفحة فوراً بالبيانات المحلية */
   applyData();
   observeReveals(document);
 
-  /* 2. زامن في الخلفية — لا تحجب العرض */
+  var base64Count = hasBase64Photos(S);
+  if(base64Count > 0){
+    console.warn('[RAED] ⚠️ Found ' + base64Count + ' base64 images. This slows down page load. Clean them via Admin → Gallery → Recover button.');
+  }
+
   if(cloudSignedReady()){
     loadCloudCreds().then(function(creds){
       if(creds){
