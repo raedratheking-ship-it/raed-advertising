@@ -24,6 +24,16 @@ function T(o){
   return o.en || o.ar || '';
 }
 
+/* ✅ تحسين روابط Cloudinary تلقائياً */
+function optimizeCloudUrl(url, width){
+  if(!url || typeof url !== 'string') return url;
+  if(url.indexOf('cloudinary.com') === -1) return url;
+  if(url.indexOf('/image/upload/') === -1) return url;
+  if(url.indexOf('/f_auto') > -1 || url.indexOf('/q_auto') > -1) return url;
+  var w = width || 800;
+  return url.replace('/image/upload/', '/image/upload/f_auto,q_auto,w_' + w + ',c_limit,dpr_auto/');
+}
+
 function ph(label,h,seed){
   h = h||760; seed = seed||0;
   var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="'+h+'" viewBox="0 0 600 '+h+'"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0b1f47"/><stop offset="1" stop-color="#04091c"/></linearGradient><linearGradient id="ac" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#00eeea"/><stop offset="1" stop-color="#2b6bff"/></linearGradient></defs><rect width="600" height="'+h+'" fill="url(#bg)"/><circle cx="'+(470-seed*40)+'" cy="'+(150+seed*50)+'" r="195" fill="url(#ac)" opacity="0.17"/><text x="60" y="'+(h-95)+'" font-family="Arial" font-size="27" font-weight="700" fill="#e9f3ff" opacity="0.92">'+label+'</text><text x="60" y="'+(h-62)+'" font-family="Arial" font-size="14" letter-spacing="3" fill="#00eeea" opacity="0.85">RAED ADVERTISING</text></svg>';
@@ -43,7 +53,6 @@ function seedPhotos(data){
   });
 }
 
-/* ✅ تحويل الصور من الشكل القديم (نص) إلى الشكل الجديد (كائن) */
 function migratePhoto(p){
   if(typeof p === 'string') return { src: p, desc: {en:'', ar:''}, link: '' };
   if(!p || typeof p !== 'object') return null;
@@ -118,7 +127,6 @@ function migrate(d, defaults){
   return d;
 }
 
-/* ✅ مسح المفاتيح القديمة */
 try {
   ['raed.site.v6','raed.site.v7','raed.site.v8','raed.site.v9'].forEach(function(k){ localStorage.removeItem(k); });
 } catch(e){}
@@ -141,7 +149,6 @@ try {
 
 console.log('[RAED] Cloudinary config:', { name: CLOUD.name, folder: CLOUD.folder, imagePreset: CLOUD.imagePreset, hasKeys: !!(CLOUD.apiKey && CLOUD.apiSecret) });
 
-/* ✅ تشفير كلمة السر — SHA-256 مع salt ثابت */
 var CRED_SALT = 'raed-adv-v4-secure-salt-' + (CFG.cloudinary && CFG.cloudinary.name || 'x');
 async function hashCreds(u, p){
   var input = CRED_SALT + '|' + u + '|' + p + '|' + CRED_SALT;
@@ -239,15 +246,21 @@ function renderFilters(){
   $('#filters').innerHTML = h;
 }
 
+/* ✅ معرض محسّن: صور بأحجام مناسبة + Cloudinary transformations */
 function renderGallery(){
   var items = galleryItems(), grid = $('#galleryGrid');
   if(!items.length){ grid.innerHTML = '<div class="empty">'+esc(L('noImages'))+'</div>'; return; }
+
+  var vw = window.innerWidth || 1200;
+  var thumbW = vw < 560 ? 500 : (vw < 900 ? 700 : 900);
+
   grid.innerHTML = items.map(function(it,i){
     var hasDesc = it.desc && (it.desc.en || it.desc.ar);
     var hasLink = it.link && it.link.trim();
     var displayText = hasDesc ? T(it.desc) : it.group;
     var linkIndicator = hasLink ? ' <span style="color:var(--cyan)">🔗</span>' : '';
-    return '<figure class="gitem reveal" data-index="'+i+'" tabindex="0" role="button"><img src="'+esc(it.src)+'" alt="'+esc(displayText)+'" loading="lazy" decoding="async"><figcaption>'+esc(displayText)+linkIndicator+'</figcaption></figure>';
+    var optSrc = optimizeCloudUrl(it.src, thumbW);
+    return '<figure class="gitem reveal" data-index="'+i+'" tabindex="0" role="button"><img src="'+esc(optSrc)+'" alt="'+esc(displayText)+'" loading="lazy" decoding="async"><figcaption>'+esc(displayText)+linkIndicator+'</figcaption></figure>';
   }).join('');
   observeReveals(grid);
 }
@@ -256,13 +269,14 @@ var lightbox = $('#lightbox'), lastFocus = null;
 function openLightbox(i){ lbItems = galleryItems(); if(!lbItems.length) return; lbIndex = (i + lbItems.length) % lbItems.length; updateLightbox(); lastFocus = document.activeElement; lightbox.classList.add('open'); document.body.style.overflow = 'hidden'; var c = $('.lb-close'); if(c) c.focus(); }
 function updateLightbox(){
   var it = lbItems[lbIndex];
-  $('#lbImg').src = it.src;
+  /* ✅ نسخة كبيرة محسّنة للـ lightbox */
+  var bigSrc = optimizeCloudUrl(it.src, 1600);
+  $('#lbImg').src = bigSrc;
   $('#lbImg').alt = it.group;
   var cap = it.group + ' · ' + (lbIndex+1) + '/' + lbItems.length;
   var descText = it.desc && (it.desc.en || it.desc.ar) ? T(it.desc) : '';
   var linkUrl = it.link && it.link.trim() ? it.link : '';
   var capEl = $('#lbCaption');
-  /* ✅ اسمح بالنص المتعدد الأسطر للوصف */
   capEl.style.whiteSpace = 'normal';
   capEl.style.maxWidth = 'min(700px,88vw)';
   capEl.style.textAlign = 'center';
@@ -364,7 +378,7 @@ $('#cfForm').addEventListener('submit', async function(e){
 });
 
 /* ===== ADMIN ===== */
-var DEFAULT_CRED = { u:'raed', h:null, p:'200311200311raed' };  /* p للتوافق الرجعي فقط */
+var DEFAULT_CRED = { u:'raed', h:null, p:'200311200311raed' };
 var CRED = DEFAULT_CRED;
 try { var svc = JSON.parse(localStorage.getItem(AKEY) || 'null'); if(svc && svc.u && (svc.h || svc.p)) CRED = svc; } catch(e){}
 var adminEl = $('#admin'), admBody = $('#admBody'), admStatusEl = $('#admStatus');
@@ -462,7 +476,7 @@ async function saveCloudJson(data, customId){
 async function loadCloudJson(){
   if(!cloudReady()) return null;
   try {
-    var r = await fetch(cloudJsonUrl() + '?t=' + Date.now(), { cache: 'no-store' });
+    var r = await fetch(cloudJsonUrl() + '?t=' + Math.floor(Date.now()/60000), { cache: 'default' });
     if(!r.ok) return null;
     var d = await r.json();
     if(d && d.hero && d.groups && !d.test) return migrate(d, DEFAULT_DATA);
@@ -473,7 +487,7 @@ async function loadCloudJson(){
 async function loadCloudCreds(){
   if(!cloudSignedReady()) return null;
   try {
-    var r = await fetch(cloudCredsUrl() + '?t=' + Date.now(), { cache: 'no-store' });
+    var r = await fetch(cloudCredsUrl() + '?t=' + Math.floor(Date.now()/60000), { cache: 'default' });
     if(!r.ok) return null;
     var d = await r.json();
     if(d && d.u && (d.h || d.p)) return d;
@@ -484,7 +498,6 @@ async function loadCloudCreds(){
 function openAdmin(){ adminEl.hidden = false; document.body.style.overflow = 'hidden'; status(''); if(AUTH) renderDash(); else renderLogin(); adminEl.scrollTop = 0; }
 function closeAdmin(){ adminEl.hidden = true; document.body.style.overflow = ''; if(location.hash === '#admin') history.replaceState(null, '', location.pathname + location.search); }
 
-/* ✅ تسجيل الدخول — يقبل hash (جديد) أو plaintext (قديم) */
 function renderLogin(){
   admBody.innerHTML = '<form id="loginForm" class="panel login-wrap"><img class="brand-logo login-logo" data-logo alt=""><h3 style="font-size:1.15rem;margin-bottom:18px">' + esc(L('signIn')) + '</h3><div class="field"><label for="lu">' + esc(L('username')) + '</label><input id="lu" autocomplete="username" spellcheck="false"></div><div class="field"><label for="lp">' + esc(L('password')) + '</label><input id="lp" type="password"></div><p class="hint" id="loginErr" style="color:#ff9d9d;min-height:1.3em"></p><button class="btn btn-primary" type="submit" style="width:100%">' + esc(L('signIn')) + '</button></form>';
   $$('[data-logo]', admBody).forEach(function(i){ i.src = LOGO; });
@@ -497,7 +510,7 @@ function renderLogin(){
         var h = await hashCreds(u, p);
         if(h === CRED.h) ok = true;
       } else if(CRED.p && p === CRED.p){
-        ok = true;  /* توافق رجعي */
+        ok = true;
       }
     }
     if(ok){ AUTH = true; status(''); renderDash(); }
@@ -554,7 +567,9 @@ function renderTab(){
         var t = src.indexOf('http')===0 ? (src.indexOf('cloudinary')>-1?'cloud':'url') : 'local';
         var ind = (hasDesc ? '📝' : '') + (hasLink ? '🔗' : '');
         var indBadge = ind ? '<span class="thumb-badge" style="inset-inline-start:auto;inset-inline-end:5px;top:5px;background:rgba(0,238,234,.9);color:#02141a">'+ind+'</span>' : '';
-        return '<div class="thumb"><img src="'+esc(src)+'" alt="" loading="lazy"><span class="thumb-badge '+t+'">'+t+'</span>'+indBadge+'<div class="thumb-actions"><button data-act="pleft" data-i="'+gi+'" data-p="'+pi+'" type="button">←</button><button data-act="pedit" data-i="'+gi+'" data-p="'+pi+'" type="button" title="'+(LANG==='ar'?'تعديل الوصف والرابط':'Edit description & link')+'">✎</button><button data-act="pcover" data-i="'+gi+'" data-p="'+pi+'" type="button">★</button><button data-act="pdel" data-i="'+gi+'" data-p="'+pi+'" type="button">✕</button><button data-act="pright" data-i="'+gi+'" data-p="'+pi+'" type="button">→</button></div></div>';
+        /* ✅ استخدم صورة مصغّرة محسّنة في لوحة الأدمن */
+        var adminThumb = optimizeCloudUrl(src, 300);
+        return '<div class="thumb"><img src="'+esc(adminThumb)+'" alt="" loading="lazy"><span class="thumb-badge '+t+'">'+t+'</span>'+indBadge+'<div class="thumb-actions"><button data-act="pleft" data-i="'+gi+'" data-p="'+pi+'" type="button">←</button><button data-act="pedit" data-i="'+gi+'" data-p="'+pi+'" type="button" title="'+(LANG==='ar'?'تعديل الوصف والرابط':'Edit description & link')+'">✎</button><button data-act="pcover" data-i="'+gi+'" data-p="'+pi+'" type="button">★</button><button data-act="pdel" data-i="'+gi+'" data-p="'+pi+'" type="button">✕</button><button data-act="pright" data-i="'+gi+'" data-p="'+pi+'" type="button">→</button></div></div>';
       }).join('');
       return '<div class="panel"><div class="group-head"><div class="field" style="flex:1"><label>'+esc(L('categoryName'))+'</label><input data-bind="groups.'+gi+'.name.en" value="'+esc(g.name.en||'')+'" spellcheck="false"><input data-bind="groups.'+gi+'.name.ar" value="'+esc(g.name.ar||'')+'" dir="rtl" spellcheck="false" style="margin-top:6px"></div><button class="btn btn-ghost btn-sm" data-act="gup" data-i="'+gi+'" type="button">↑</button><button class="btn btn-ghost btn-sm" data-act="gdown" data-i="'+gi+'" type="button">↓</button><button class="btn btn-danger btn-sm" data-act="gdel" data-i="'+gi+'" type="button">'+esc(L('delete'))+'</button></div><div class="upload-methods"><button class="btn btn-xs btn-cloud" data-act="ucloud" data-i="'+gi+'" type="button">'+esc(L('uploadCloud'))+'</button><button class="btn btn-xs btn-url" data-act="uurl" data-i="'+gi+'" type="button">'+esc(L('fromUrl'))+'</button><button class="btn btn-xs btn-ghost" data-act="ulocal" data-i="'+gi+'" type="button">'+esc(L('local'))+'</button></div><div class="dropzone" data-drop="'+gi+'">'+esc(dropLabel)+'<input type="file" accept="image/*" multiple hidden data-file="'+gi+'" data-method="local"><input type="file" accept="image/*" multiple hidden data-file="'+gi+'" data-method="cloud"></div><div class="progress-bar" id="prog-'+gi+'" style="display:none"><span style="width:0%"></span></div>'+((g.photos||[]).length?'<div class="thumbs">'+thumbs+'</div>':'<p class="hint">'+esc(L('noImagesCat'))+'</p>')+'</div>';
     }).join('')+'<div class="panel"><button class="btn btn-ghost btn-sm" data-act="gadd" type="button">'+esc(L('addCategory'))+'</button></div>';
@@ -618,7 +633,7 @@ $('#urlAdd').addEventListener('click', function(){
   closeUrlModal(); renderTab(); status('✓'); setTimeout(function(){ status(''); }, 2400);
 });
 
-/* ✅ نافذة تعديل وصف الصورة — تُبنى ديناميكياً */
+/* نافذة تعديل الوصف */
 (function(){
   if($('#descModal')) return;
   var modal = document.createElement('div');
@@ -742,8 +757,6 @@ adminEl.addEventListener('click', async function(e){
     fetch(testUrl, { mode:'no-cors' }).then(function(){ status('✓ Test sent — check your WhatsApp'); setTimeout(function(){ status(''); }, 4000); }).catch(function(err){ status('✗ Failed: '+err.message); setTimeout(function(){ status(''); }, 5000); });
     return;
   }
-
-  /* ✅ حفظ كلمة السر: hash + Cloudinary */
   if(a === 'savecred'){
     var u = $('#f_cred_u').value.trim(), pw = $('#f_cred_p').value;
     if(!u || !pw){ alert(LANG==='ar'?'عبّئ الحقلين (اسم المستخدم وكلمة السر)':'Fill both fields'); return; }
@@ -875,7 +888,7 @@ async function saveAll(){
   }
 }
 
-/* ✅ فتح لوحة الأدمن: 4 نقرات سريعة بالضبط */
+/* فتح لوحة الأدمن: 4 نقرات سريعة */
 var clickCount = 0, clickTimer = null;
 var CLICK_WINDOW = 400;
 var REQUIRED_CLICKS = 4;
@@ -899,26 +912,34 @@ $('#footerBrand').addEventListener('click', function(e){ if(clickCount > 0) e.pr
 if(location.hash === '#admin'){ W = clone(S); openAdmin(); }
 window.addEventListener('hashchange', function(){ if(location.hash === '#admin' && adminEl.hidden){ W = clone(S); openAdmin(); } });
 
-async function boot(){
+/* ✅ boot غير مُعطِّل — اعرض فوراً ثم زامن في الخلفية */
+function boot(){
+  /* 1. اعرض الصفحة فوراً بالبيانات المحلية */
+  applyData();
+  observeReveals(document);
+
+  /* 2. زامن في الخلفية — لا تحجب العرض */
   if(cloudSignedReady()){
-    var cloudCreds = await loadCloudCreds();
-    if(cloudCreds){
-      CRED = cloudCreds;
-      try { localStorage.setItem(AKEY, JSON.stringify(CRED)); } catch(e){}
-      console.log('[RAED] Loaded credentials from Cloudinary (hashed: ' + !!cloudCreds.h + ')');
-    }
+    loadCloudCreds().then(function(creds){
+      if(creds){
+        CRED = creds;
+        try { localStorage.setItem(AKEY, JSON.stringify(CRED)); } catch(e){}
+        console.log('[RAED] Credentials synced from cloud');
+      }
+    }).catch(function(e){ console.warn('[RAED] creds sync failed:', e); });
   }
 
   if(cloudReady()){
-    var cloudData = await loadCloudJson();
-    if(cloudData){
-      S = cloudData;
-      try { localStorage.setItem(DKEY, JSON.stringify(S)); } catch(e){}
-    }
+    loadCloudJson().then(function(d){
+      if(d){
+        S = d;
+        try { localStorage.setItem(DKEY, JSON.stringify(S)); } catch(e){}
+        applyData();
+        observeReveals(document);
+        console.log('[RAED] Data synced from cloud');
+      }
+    }).catch(function(e){ console.warn('[RAED] data sync failed:', e); });
   }
-
-  applyData();
-  observeReveals(document);
 }
 boot();
 
