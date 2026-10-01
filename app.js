@@ -38,9 +38,21 @@ function seedPhotos(data){
     for(var i = 0; i < count; i++){
       var h = HEIGHTS[(gi+i) % HEIGHTS.length];
       var nm = (g.name && (g.name.en || g.name)) || ('Item '+(i+1));
-      g.photos.push(ph(nm, h, (gi+i) % 3));
+      g.photos.push({ src: ph(nm, h, (gi+i) % 3), desc:{en:'',ar:''}, link:'' });
     }
   });
+}
+
+/* ✅ تحويل الصور من الشكل القديم (نص) إلى الشكل الجديد (كائن) */
+function migratePhoto(p){
+  if(typeof p === 'string') return { src: p, desc: {en:'', ar:''}, link: '' };
+  if(!p || typeof p !== 'object') return null;
+  var src = p.src || p.url || '';
+  if(!src) return null;
+  var desc = p.desc || p.cap || p.caption;
+  if(typeof desc === 'string') desc = {en:desc, ar:desc};
+  if(!desc) desc = {en:'', ar:''};
+  return { src: src, desc: fillBilingual(desc, {en:'', ar:''}), link: p.link || '' };
 }
 
 function fillBilingual(target, reference){
@@ -92,7 +104,8 @@ function migrate(d, defaults){
         });
         if(!def) def = defaults.groups[i];
       }
-      return { id: g.id, name: fillBilingual(g.name, def && def.name), photos: g.photos || [] };
+      var photos = (g.photos || []).map(migratePhoto).filter(function(x){ return x && x.src; });
+      return { id: g.id, name: fillBilingual(g.name, def && def.name), photos: photos };
     });
   }
   if(d.contact){
@@ -105,12 +118,12 @@ function migrate(d, defaults){
   return d;
 }
 
-/* ✅ مسح المفاتيح القديمة لتوفير مساحة localStorage */
+/* ✅ مسح المفاتيح القديمة */
 try {
   ['raed.site.v6','raed.site.v7','raed.site.v8','raed.site.v9'].forEach(function(k){ localStorage.removeItem(k); });
 } catch(e){}
 
-var DKEY = 'raed.site.v10', AKEY = 'raed.admin.v3', CKEY = 'raed.cloud.v5';
+var DKEY = 'raed.site.v10', AKEY = 'raed.admin.v4', CKEY = 'raed.cloud.v5';
 
 var CLOUD = {
   name:        (CFG.cloudinary && CFG.cloudinary.name)        || '',
@@ -126,7 +139,16 @@ try {
   if(scv && scv.name && scv.imagePreset) CLOUD = scv;
 } catch(e){}
 
-console.log('[RAED] Cloudinary config:', CLOUD);
+console.log('[RAED] Cloudinary config:', { name: CLOUD.name, folder: CLOUD.folder, imagePreset: CLOUD.imagePreset, hasKeys: !!(CLOUD.apiKey && CLOUD.apiSecret) });
+
+/* ✅ تشفير كلمة السر — SHA-256 مع salt ثابت */
+var CRED_SALT = 'raed-adv-v4-secure-salt-' + (CFG.cloudinary && CFG.cloudinary.name || 'x');
+async function hashCreds(u, p){
+  var input = CRED_SALT + '|' + u + '|' + p + '|' + CRED_SALT;
+  var buf = new TextEncoder().encode(input);
+  var h = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(h)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+}
 
 var S = (function(){
   var st = null;
@@ -192,7 +214,23 @@ function applyData(){
   renderFilters(); renderGallery(); observeReveals(document);
 }
 
-function galleryItems(){ var o = []; (S.groups || []).forEach(function(g){ if(activeFilter !== 'all' && g.id !== activeFilter) return; (g.photos || []).forEach(function(s){ o.push({src:s, group:T(g.name)}); }); }); return o; }
+function galleryItems(){
+  var o = [];
+  (S.groups || []).forEach(function(g){
+    if(activeFilter !== 'all' && g.id !== activeFilter) return;
+    (g.photos || []).forEach(function(p){
+      var photo = typeof p === 'string' ? {src:p, desc:{en:'',ar:''}, link:''} : p;
+      if(!photo.src) return;
+      o.push({
+        src: photo.src,
+        desc: photo.desc || {en:'',ar:''},
+        link: photo.link || '',
+        group: T(g.name)
+      });
+    });
+  });
+  return o;
+}
 
 function renderFilters(){
   var gs = (S.groups || []).filter(function(g){ return (g.photos || []).length; });
@@ -204,13 +242,36 @@ function renderFilters(){
 function renderGallery(){
   var items = galleryItems(), grid = $('#galleryGrid');
   if(!items.length){ grid.innerHTML = '<div class="empty">'+esc(L('noImages'))+'</div>'; return; }
-  grid.innerHTML = items.map(function(it,i){ return '<figure class="gitem reveal" data-index="'+i+'" tabindex="0" role="button"><img src="'+esc(it.src)+'" alt="'+esc(it.group)+'" loading="lazy" decoding="async"><figcaption>'+esc(it.group)+'</figcaption></figure>'; }).join('');
+  grid.innerHTML = items.map(function(it,i){
+    var hasDesc = it.desc && (it.desc.en || it.desc.ar);
+    var hasLink = it.link && it.link.trim();
+    var displayText = hasDesc ? T(it.desc) : it.group;
+    var linkIndicator = hasLink ? ' <span style="color:var(--cyan)">🔗</span>' : '';
+    return '<figure class="gitem reveal" data-index="'+i+'" tabindex="0" role="button"><img src="'+esc(it.src)+'" alt="'+esc(displayText)+'" loading="lazy" decoding="async"><figcaption>'+esc(displayText)+linkIndicator+'</figcaption></figure>';
+  }).join('');
   observeReveals(grid);
 }
 
 var lightbox = $('#lightbox'), lastFocus = null;
 function openLightbox(i){ lbItems = galleryItems(); if(!lbItems.length) return; lbIndex = (i + lbItems.length) % lbItems.length; updateLightbox(); lastFocus = document.activeElement; lightbox.classList.add('open'); document.body.style.overflow = 'hidden'; var c = $('.lb-close'); if(c) c.focus(); }
-function updateLightbox(){ var it = lbItems[lbIndex]; $('#lbImg').src = it.src; $('#lbImg').alt = it.group; $('#lbCaption').textContent = it.group + ' · ' + (lbIndex+1) + '/' + lbItems.length; }
+function updateLightbox(){
+  var it = lbItems[lbIndex];
+  $('#lbImg').src = it.src;
+  $('#lbImg').alt = it.group;
+  var cap = it.group + ' · ' + (lbIndex+1) + '/' + lbItems.length;
+  var descText = it.desc && (it.desc.en || it.desc.ar) ? T(it.desc) : '';
+  var linkUrl = it.link && it.link.trim() ? it.link : '';
+  var capEl = $('#lbCaption');
+  /* ✅ اسمح بالنص المتعدد الأسطر للوصف */
+  capEl.style.whiteSpace = 'normal';
+  capEl.style.maxWidth = 'min(700px,88vw)';
+  capEl.style.textAlign = 'center';
+  capEl.style.lineHeight = '1.5';
+  var html = '<span style="opacity:.85">' + esc(cap) + '</span>';
+  if(descText) html += '<div style="margin-top:6px;color:var(--text);font-weight:500;font-size:.92rem">' + esc(descText) + '</div>';
+  if(linkUrl) html += '<div style="margin-top:8px"><a href="' + esc(linkUrl) + '" target="_blank" rel="noopener" style="color:var(--cyan);text-decoration:underline;font-weight:600">🔗 ' + (LANG==='ar'?'زيارة الرابط':'Visit link') + '</a></div>';
+  capEl.innerHTML = html;
+}
 function closeLightbox(){ lightbox.classList.remove('open'); document.body.style.overflow = ''; if(lastFocus && lastFocus.focus) lastFocus.focus(); }
 
 $$('[data-logo]').forEach(function(img){
@@ -303,9 +364,9 @@ $('#cfForm').addEventListener('submit', async function(e){
 });
 
 /* ===== ADMIN ===== */
-var DEFAULT_CRED = { u:'raed', p:'200311200311raed' };
+var DEFAULT_CRED = { u:'raed', h:null, p:'200311200311raed' };  /* p للتوافق الرجعي فقط */
 var CRED = DEFAULT_CRED;
-try { var svc = JSON.parse(localStorage.getItem(AKEY) || 'null'); if(svc && svc.u && svc.p) CRED = svc; } catch(e){}
+try { var svc = JSON.parse(localStorage.getItem(AKEY) || 'null'); if(svc && svc.u && (svc.h || svc.p)) CRED = svc; } catch(e){}
 var adminEl = $('#admin'), admBody = $('#admBody'), admStatusEl = $('#admStatus');
 var AUTH = false, TAB = 'content', W = null, pendingUrlGroup = null;
 function status(m){ if(admStatusEl) admStatusEl.textContent = m || ''; }
@@ -364,7 +425,6 @@ async function uploadCvToCloudinary(file){
   });
 }
 
-/* ✅ saveCloudJson مع إمكانية تحديد public_id مخصص */
 async function saveCloudJson(data, customId){
   if(!cloudSignedReady()) throw new Error('Cloudinary keys missing');
   var pid = customId || CLOUD_JSON_ID;
@@ -390,7 +450,6 @@ async function saveCloudJson(data, customId){
       } else {
         var m = 'Save failed ('+x.status+')';
         try { var er = JSON.parse(x.responseText); if(er.error && er.error.message) m = er.error.message; } catch(e){}
-        console.error('[RAED] saveCloudJson error:', m, x.responseText);
         rej(new Error(m));
       }
     };
@@ -411,14 +470,13 @@ async function loadCloudJson(){
   return null;
 }
 
-/* ✅ تحميل كلمة سر الأدمن من Cloudinary */
 async function loadCloudCreds(){
   if(!cloudSignedReady()) return null;
   try {
     var r = await fetch(cloudCredsUrl() + '?t=' + Date.now(), { cache: 'no-store' });
     if(!r.ok) return null;
     var d = await r.json();
-    if(d && d.u && d.p) return d;
+    if(d && d.u && (d.h || d.p)) return d;
   } catch(e){ console.error('[RAED] loadCloudCreds error:', e); }
   return null;
 }
@@ -426,10 +484,25 @@ async function loadCloudCreds(){
 function openAdmin(){ adminEl.hidden = false; document.body.style.overflow = 'hidden'; status(''); if(AUTH) renderDash(); else renderLogin(); adminEl.scrollTop = 0; }
 function closeAdmin(){ adminEl.hidden = true; document.body.style.overflow = ''; if(location.hash === '#admin') history.replaceState(null, '', location.pathname + location.search); }
 
+/* ✅ تسجيل الدخول — يقبل hash (جديد) أو plaintext (قديم) */
 function renderLogin(){
   admBody.innerHTML = '<form id="loginForm" class="panel login-wrap"><img class="brand-logo login-logo" data-logo alt=""><h3 style="font-size:1.15rem;margin-bottom:18px">' + esc(L('signIn')) + '</h3><div class="field"><label for="lu">' + esc(L('username')) + '</label><input id="lu" autocomplete="username" spellcheck="false"></div><div class="field"><label for="lp">' + esc(L('password')) + '</label><input id="lp" type="password"></div><p class="hint" id="loginErr" style="color:#ff9d9d;min-height:1.3em"></p><button class="btn btn-primary" type="submit" style="width:100%">' + esc(L('signIn')) + '</button></form>';
   $$('[data-logo]', admBody).forEach(function(i){ i.src = LOGO; });
-  $('#loginForm').addEventListener('submit', function(e){ e.preventDefault(); var u = $('#lu').value.trim(), p = $('#lp').value; if(u === CRED.u && p === CRED.p){ AUTH = true; status(''); renderDash(); } else { $('#loginErr').textContent = LANG === 'ar' ? 'بيانات خاطئة' : 'Incorrect credentials'; } });
+  $('#loginForm').addEventListener('submit', async function(e){
+    e.preventDefault();
+    var u = $('#lu').value.trim(), p = $('#lp').value;
+    var ok = false;
+    if(u === CRED.u){
+      if(CRED.h){
+        var h = await hashCreds(u, p);
+        if(h === CRED.h) ok = true;
+      } else if(CRED.p && p === CRED.p){
+        ok = true;  /* توافق رجعي */
+      }
+    }
+    if(ok){ AUTH = true; status(''); renderDash(); }
+    else { $('#loginErr').textContent = LANG === 'ar' ? 'بيانات خاطئة' : 'Incorrect credentials'; }
+  });
   setTimeout(function(){ var el = $('#lu'); if(el) el.focus(); }, 40);
 }
 
@@ -472,8 +545,18 @@ function renderTab(){
     var dropLabel = cloudReady()
       ? (LANG === 'ar' ? '☁️ اسحب وأفلت هنا (رفع مباشر إلى Cloudinary)' : '☁️ Drag & drop here (uploads to Cloudinary)')
       : L('dragDrop');
-    p.innerHTML = '<div class="panel" style="background:rgba(0,238,234,.05)"><div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between"><h3 style="margin:0">'+esc(L('tabGallery'))+'</h3>'+badge+'</div></div>'+(W.groups||[]).map(function(g,gi){
-      return '<div class="panel"><div class="group-head"><div class="field" style="flex:1"><label>'+esc(L('categoryName'))+'</label><input data-bind="groups.'+gi+'.name.en" value="'+esc(g.name.en||'')+'" spellcheck="false"><input data-bind="groups.'+gi+'.name.ar" value="'+esc(g.name.ar||'')+'" dir="rtl" spellcheck="false" style="margin-top:6px"></div><button class="btn btn-ghost btn-sm" data-act="gup" data-i="'+gi+'" type="button">↑</button><button class="btn btn-ghost btn-sm" data-act="gdown" data-i="'+gi+'" type="button">↓</button><button class="btn btn-danger btn-sm" data-act="gdel" data-i="'+gi+'" type="button">'+esc(L('delete'))+'</button></div><div class="upload-methods"><button class="btn btn-xs btn-cloud" data-act="ucloud" data-i="'+gi+'" type="button">'+esc(L('uploadCloud'))+'</button><button class="btn btn-xs btn-url" data-act="uurl" data-i="'+gi+'" type="button">'+esc(L('fromUrl'))+'</button><button class="btn btn-xs btn-ghost" data-act="ulocal" data-i="'+gi+'" type="button">'+esc(L('local'))+'</button></div><div class="dropzone" data-drop="'+gi+'">'+esc(dropLabel)+'<input type="file" accept="image/*" multiple hidden data-file="'+gi+'" data-method="local"><input type="file" accept="image/*" multiple hidden data-file="'+gi+'" data-method="cloud"></div><div class="progress-bar" id="prog-'+gi+'" style="display:none"><span style="width:0%"></span></div>'+((g.photos||[]).length?'<div class="thumbs">'+g.photos.map(function(src,pi){ var t = src.indexOf('http')===0 ? (src.indexOf('cloudinary')>-1?'cloud':'url') : 'local'; return '<div class="thumb"><img src="'+esc(src)+'" alt="" loading="lazy"><span class="thumb-badge '+t+'">'+t+'</span><div class="thumb-actions"><button data-act="pleft" data-i="'+gi+'" data-p="'+pi+'" type="button">←</button><button data-act="pcover" data-i="'+gi+'" data-p="'+pi+'" type="button">★</button><button data-act="pdel" data-i="'+gi+'" data-p="'+pi+'" type="button">✕</button><button data-act="pright" data-i="'+gi+'" data-p="'+pi+'" type="button">→</button></div></div>'; }).join('')+'</div>':'<p class="hint">'+esc(L('noImagesCat'))+'</p>')+'</div>';
+    p.innerHTML = '<div class="panel" style="background:rgba(0,238,234,.05)"><div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between"><h3 style="margin:0">'+esc(L('tabGallery'))+'</h3>'+badge+'</div><p class="hint" style="margin-top:8px">💡 '+(LANG==='ar'?'اضغط ✎ تحت أي صورة لإضافة وصف ورابط.':'Click ✎ on any image to add description & link.')+'</p></div>'+(W.groups||[]).map(function(g,gi){
+      var thumbs = (g.photos||[]).map(function(photo,pi){
+        var obj = typeof photo === 'string' ? {src:photo, desc:{en:'',ar:''}, link:''} : photo;
+        var src = obj.src;
+        var hasDesc = obj.desc && (obj.desc.en || obj.desc.ar);
+        var hasLink = obj.link && obj.link.trim();
+        var t = src.indexOf('http')===0 ? (src.indexOf('cloudinary')>-1?'cloud':'url') : 'local';
+        var ind = (hasDesc ? '📝' : '') + (hasLink ? '🔗' : '');
+        var indBadge = ind ? '<span class="thumb-badge" style="inset-inline-start:auto;inset-inline-end:5px;top:5px;background:rgba(0,238,234,.9);color:#02141a">'+ind+'</span>' : '';
+        return '<div class="thumb"><img src="'+esc(src)+'" alt="" loading="lazy"><span class="thumb-badge '+t+'">'+t+'</span>'+indBadge+'<div class="thumb-actions"><button data-act="pleft" data-i="'+gi+'" data-p="'+pi+'" type="button">←</button><button data-act="pedit" data-i="'+gi+'" data-p="'+pi+'" type="button" title="'+(LANG==='ar'?'تعديل الوصف والرابط':'Edit description & link')+'">✎</button><button data-act="pcover" data-i="'+gi+'" data-p="'+pi+'" type="button">★</button><button data-act="pdel" data-i="'+gi+'" data-p="'+pi+'" type="button">✕</button><button data-act="pright" data-i="'+gi+'" data-p="'+pi+'" type="button">→</button></div></div>';
+      }).join('');
+      return '<div class="panel"><div class="group-head"><div class="field" style="flex:1"><label>'+esc(L('categoryName'))+'</label><input data-bind="groups.'+gi+'.name.en" value="'+esc(g.name.en||'')+'" spellcheck="false"><input data-bind="groups.'+gi+'.name.ar" value="'+esc(g.name.ar||'')+'" dir="rtl" spellcheck="false" style="margin-top:6px"></div><button class="btn btn-ghost btn-sm" data-act="gup" data-i="'+gi+'" type="button">↑</button><button class="btn btn-ghost btn-sm" data-act="gdown" data-i="'+gi+'" type="button">↓</button><button class="btn btn-danger btn-sm" data-act="gdel" data-i="'+gi+'" type="button">'+esc(L('delete'))+'</button></div><div class="upload-methods"><button class="btn btn-xs btn-cloud" data-act="ucloud" data-i="'+gi+'" type="button">'+esc(L('uploadCloud'))+'</button><button class="btn btn-xs btn-url" data-act="uurl" data-i="'+gi+'" type="button">'+esc(L('fromUrl'))+'</button><button class="btn btn-xs btn-ghost" data-act="ulocal" data-i="'+gi+'" type="button">'+esc(L('local'))+'</button></div><div class="dropzone" data-drop="'+gi+'">'+esc(dropLabel)+'<input type="file" accept="image/*" multiple hidden data-file="'+gi+'" data-method="local"><input type="file" accept="image/*" multiple hidden data-file="'+gi+'" data-method="cloud"></div><div class="progress-bar" id="prog-'+gi+'" style="display:none"><span style="width:0%"></span></div>'+((g.photos||[]).length?'<div class="thumbs">'+thumbs+'</div>':'<p class="hint">'+esc(L('noImagesCat'))+'</p>')+'</div>';
     }).join('')+'<div class="panel"><button class="btn btn-ghost btn-sm" data-act="gadd" type="button">'+esc(L('addCategory'))+'</button></div>';
     return;
   }
@@ -487,7 +570,8 @@ function renderTab(){
   if(TAB === 'settings'){
     var cs = cloudReady() ? '<span class="cloud-status on">✓ '+esc(LANG==='ar'?'مُفعَّل':'Enabled')+'</span>' : '<span class="cloud-status off">✗ '+esc(LANG==='ar'?'غير مُفعَّل':'Not enabled')+'</span>';
     var signedBadge = cloudSignedReady() ? '<span class="cloud-status on">✓ Signed</span>' : '<span class="cloud-status off">✗ Signed</span>';
-    p.innerHTML = '<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px"><h3 style="margin:0">☁️ Cloudinary</h3><div style="display:flex;gap:8px;flex-wrap:wrap">'+cs+signedBadge+'</div></div>'+'<p class="hint" style="margin-bottom:16px">'+esc(L('cloudHelp'))+'</p><div class="grid2">'+singleField(L('cloudName'),CLOUD.name,'cloud.name')+singleField(L('folder'),CLOUD.folder||'','cloud.folder')+'</div><div class="grid2">'+singleField(L('imagePreset'),CLOUD.imagePreset||'','cloud.imagePreset')+singleField(L('dataPreset'),CLOUD.dataPreset||'','cloud.dataPreset')+'</div><div class="grid2">'+singleField(L('apiKey'),CLOUD.apiKey||'','cloud.apiKey')+singleField(L('apiSecret'),CLOUD.apiSecret||'','cloud.apiSecret')+'</div><div class="rowline"><button class="btn btn-primary btn-sm" data-act="savecloud" type="button">'+esc(L('saveBtn'))+'</button><button class="btn btn-ghost btn-sm" data-act="testcloud" type="button">'+esc(L('testBtn'))+'</button><button class="btn btn-danger btn-sm" data-act="clearcloud" type="button">'+esc(L('clearBtn'))+'</button></div></div>'+'<div class="panel"><h3>'+esc(L('credsSection'))+'</h3><p class="hint" style="margin-bottom:12px">'+(LANG==='ar'?'💡 عند التحديث، تُحفظ في Cloudinary وتنتقل لكل الأجهزة.':'💡 On update, saved to Cloudinary and synced across all devices.')+'</p><div class="grid2">'+singleField(L('username'),CRED.u,'cred.u')+singleField(L('password'),CRED.p,'cred.p')+'</div><button class="btn btn-primary btn-sm" data-act="savecred" type="button">'+esc(L('updateBtn'))+'</button></div>'+'<div class="panel"><h3>'+esc(L('backupSection'))+'</h3><div class="rowline"><button class="btn btn-ghost btn-sm" data-act="export" type="button">'+esc(L('exportJson'))+'</button><button class="btn btn-ghost btn-sm" data-act="import" type="button">'+esc(L('importJson'))+'</button><input type="file" accept="application/json" hidden id="importFile"><button class="btn btn-cloud btn-sm" data-act="reloadcloud" type="button">☁️ '+esc(LANG==='ar'?'إعادة تحميل من Cloudinary':'Reload from Cloud')+'</button><button class="btn btn-danger btn-sm" data-act="reset" type="button">'+esc(L('resetBtn'))+'</button></div><p class="hint">'+esc(cloudReady()?L('autoPublish'):L('noCloud'))+'</p></div>';
+    var credStatus = CRED.h ? '<span class="cloud-status on">🔒 Hashed</span>' : '<span class="cloud-status off">⚠️ Legacy</span>';
+    p.innerHTML = '<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px"><h3 style="margin:0">☁️ Cloudinary</h3><div style="display:flex;gap:8px;flex-wrap:wrap">'+cs+signedBadge+'</div></div>'+'<p class="hint" style="margin-bottom:16px">'+esc(L('cloudHelp'))+'</p><div class="grid2">'+singleField(L('cloudName'),CLOUD.name,'cloud.name')+singleField(L('folder'),CLOUD.folder||'','cloud.folder')+'</div><div class="grid2">'+singleField(L('imagePreset'),CLOUD.imagePreset||'','cloud.imagePreset')+singleField(L('dataPreset'),CLOUD.dataPreset||'','cloud.dataPreset')+'</div><div class="grid2">'+singleField(L('apiKey'),CLOUD.apiKey||'','cloud.apiKey')+singleField(L('apiSecret'),CLOUD.apiSecret||'','cloud.apiSecret')+'</div><div class="rowline"><button class="btn btn-primary btn-sm" data-act="savecloud" type="button">'+esc(L('saveBtn'))+'</button><button class="btn btn-ghost btn-sm" data-act="testcloud" type="button">'+esc(L('testBtn'))+'</button><button class="btn btn-danger btn-sm" data-act="clearcloud" type="button">'+esc(L('clearBtn'))+'</button></div></div>'+'<div class="panel"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px"><h3 style="margin:0">'+esc(L('credsSection'))+'</h3>'+credStatus+'</div><p class="hint" style="margin-bottom:12px">🔒 '+(LANG==='ar'?'كلمة السر تُشفَّر (SHA-256) قبل حفظها. عند التحديث تنتقل لكل الأجهزة.':'Password is hashed (SHA-256) before saving. On update, synced across all devices.')+'</p><div class="grid2">'+singleField(L('username'),CRED.u,'cred.u')+singleField(L('password'),'','cred.p')+'</div><button class="btn btn-primary btn-sm" data-act="savecred" type="button">'+esc(L('updateBtn'))+'</button></div>'+'<div class="panel"><h3>'+esc(L('backupSection'))+'</h3><div class="rowline"><button class="btn btn-ghost btn-sm" data-act="export" type="button">'+esc(L('exportJson'))+'</button><button class="btn btn-ghost btn-sm" data-act="import" type="button">'+esc(L('importJson'))+'</button><input type="file" accept="application/json" hidden id="importFile"><button class="btn btn-cloud btn-sm" data-act="reloadcloud" type="button">☁️ '+esc(LANG==='ar'?'إعادة تحميل من Cloudinary':'Reload from Cloud')+'</button><button class="btn btn-danger btn-sm" data-act="reset" type="button">'+esc(L('resetBtn'))+'</button></div><p class="hint">'+esc(cloudReady()?L('autoPublish'):L('noCloud'))+'</p></div>';
     return;
   }
 }
@@ -528,7 +612,69 @@ $('#urlInput').addEventListener('input', function(){
     $('#urlError').textContent = ''; $('#urlAdd').disabled = false;
   }, 600);
 });
-$('#urlAdd').addEventListener('click', function(){ if(!resolvedUrl || pendingUrlGroup === null) return; W.groups[pendingUrlGroup].photos.push(resolvedUrl); closeUrlModal(); renderTab(); status('✓'); setTimeout(function(){ status(''); }, 2400); });
+$('#urlAdd').addEventListener('click', function(){
+  if(!resolvedUrl || pendingUrlGroup === null) return;
+  W.groups[pendingUrlGroup].photos.push({ src: resolvedUrl, desc: {en:'', ar:''}, link: '' });
+  closeUrlModal(); renderTab(); status('✓'); setTimeout(function(){ status(''); }, 2400);
+});
+
+/* ✅ نافذة تعديل وصف الصورة — تُبنى ديناميكياً */
+(function(){
+  if($('#descModal')) return;
+  var modal = document.createElement('div');
+  modal.id = 'descModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:220;display:none;place-items:center;padding:24px;background:rgba(1,4,12,.88);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)';
+  var title = LANG==='ar' ? 'تعديل تفاصيل الصورة' : 'Edit image details';
+  var lblEn = LANG==='ar' ? 'الوصف (إنجليزي)' : 'Description (English)';
+  var lblAr = LANG==='ar' ? 'الوصف (عربي)' : 'Description (Arabic)';
+  var lblLink = LANG==='ar' ? 'الرابط (اختياري)' : 'Link URL (optional)';
+  var lblCancel = LANG==='ar' ? 'إلغاء' : 'Cancel';
+  var lblSave = LANG==='ar' ? 'حفظ' : 'Save';
+  var hintText = LANG==='ar' ? '💡 اترك الحقول فاضية لإزالة الوصف والرابط' : '💡 Leave fields empty to remove description and link';
+  modal.innerHTML = '<div style="width:min(520px,100%);background:linear-gradient(160deg,rgba(15,36,74,.98),rgba(6,14,34,.99));border:1px solid rgba(0,238,234,.35);border-radius:20px;padding:28px;box-shadow:0 50px 120px -40px rgba(0,238,234,.5);max-height:92vh;overflow:auto;position:relative">'
+    + '<button id="descX" type="button" style="position:absolute;top:14px;inset-inline-end:14px;width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.04);color:var(--muted);cursor:pointer;font-size:1rem;font-family:inherit">✕</button>'
+    + '<h3 style="color:var(--cyan);margin:0 0 6px">' + esc(title) + '</h3>'
+    + '<p style="color:var(--muted);font-size:.82rem;margin:0 0 18px">' + esc(hintText) + '</p>'
+    + '<div style="margin-bottom:14px"><label style="display:block;font-size:.76rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;font-weight:600">' + esc(lblEn) + '</label><input id="descEn" style="width:100%;background:#08152f;border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:11px 14px;font:inherit;color:inherit;box-sizing:border-box" maxlength="200"></div>'
+    + '<div style="margin-bottom:14px"><label style="display:block;font-size:.76rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;font-weight:600">' + esc(lblAr) + '</label><input id="descAr" dir="rtl" style="width:100%;background:#08152f;border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:11px 14px;font:inherit;color:inherit;box-sizing:border-box" maxlength="200"></div>'
+    + '<div style="margin-bottom:14px"><label style="display:block;font-size:.76rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;font-weight:600">' + esc(lblLink) + '</label><input id="descLink" type="url" placeholder="https://..." style="width:100%;background:#08152f;border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:11px 14px;font:inherit;color:inherit;box-sizing:border-box"></div>'
+    + '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">'
+    + '<button class="btn btn-ghost btn-sm" id="descCancel" type="button">' + esc(lblCancel) + '</button>'
+    + '<button class="btn btn-primary btn-sm" id="descSave" type="button">' + esc(lblSave) + '</button>'
+    + '</div></div>';
+  document.body.appendChild(modal);
+
+  var currentEdit = null;
+  function closeDescModal(){ modal.style.display = 'none'; currentEdit = null; }
+  $('#descX').addEventListener('click', closeDescModal);
+  $('#descCancel').addEventListener('click', closeDescModal);
+  modal.addEventListener('click', function(e){ if(e.target === modal) closeDescModal(); });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && modal.style.display === 'grid') closeDescModal(); });
+  $('#descSave').addEventListener('click', function(){
+    if(!currentEdit) return;
+    var en = $('#descEn').value.trim();
+    var ar = $('#descAr').value.trim();
+    var link = $('#descLink').value.trim();
+    var photo = W.groups[currentEdit.gi].photos[currentEdit.pi];
+    var src = typeof photo === 'string' ? photo : photo.src;
+    W.groups[currentEdit.gi].photos[currentEdit.pi] = { src: src, desc: {en: en, ar: ar}, link: link };
+    closeDescModal();
+    renderTab();
+    status('✓');
+    setTimeout(function(){ status(''); }, 2500);
+  });
+  window.__openDescModal = function(gi, pi){
+    if(!W || !W.groups[gi] || !W.groups[gi].photos[pi]) return;
+    var photo = W.groups[gi].photos[pi];
+    var obj = typeof photo === 'string' ? {src:photo, desc:{en:'',ar:''}, link:''} : photo;
+    $('#descEn').value = (obj.desc && obj.desc.en) || '';
+    $('#descAr').value = (obj.desc && obj.desc.ar) || '';
+    $('#descLink').value = obj.link || '';
+    currentEdit = { gi: gi, pi: pi };
+    modal.style.display = 'grid';
+    setTimeout(function(){ $('#descEn').focus(); }, 60);
+  };
+})();
 
 function resize(file){ return new Promise(function(res){ var img = new Image(), u = URL.createObjectURL(file); img.onload = function(){ var m = 1500, k = Math.min(1, m/Math.max(img.width,img.height)); var c = document.createElement('canvas'); c.width = Math.round(img.width*k); c.height = Math.round(img.height*k); var x = c.getContext('2d'); x.fillStyle = '#06122b'; x.fillRect(0,0,c.width,c.height); x.drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(u); res(c.toDataURL('image/jpeg',.82)); }; img.onerror = function(){ URL.revokeObjectURL(u); res(null); }; img.src = u; }); }
 
@@ -540,7 +686,7 @@ async function uploadCloudFiles(gi, files){
   var done = 0, ok = 0, errs = [];
   for(var i=0;i<imgs.length;i++){
     status('☁️ '+(i+1)+'/'+imgs.length+'…');
-    try { var u = await uploadToCloudinary(imgs[i], function(p){ if(bs) bs.style.width = Math.round(((done+p/100)/imgs.length)*100)+'%'; }); t.photos.push(u); ok++; }
+    try { var u = await uploadToCloudinary(imgs[i], function(p){ if(bs) bs.style.width = Math.round(((done+p/100)/imgs.length)*100)+'%'; }); t.photos.push({ src: u, desc: {en:'', ar:''}, link: '' }); ok++; }
     catch(e){ errs.push(imgs[i].name+': '+e.message); }
     done++; if(bs) bs.style.width = Math.round((done/imgs.length)*100)+'%';
   }
@@ -550,11 +696,11 @@ async function uploadCloudFiles(gi, files){
 }
 async function uploadLocalFiles(gi, files){
   status('📁 ...'); var t = W.groups[gi]; if(!t) return; var a = 0;
-  for(var i=0;i<files.length;i++){ if(!/^image\//.test(files[i].type)) continue; var d = await resize(files[i]); if(d){ t.photos.push(d); a++; } }
+  for(var i=0;i<files.length;i++){ if(!/^image\//.test(files[i].type)) continue; var d = await resize(files[i]); if(d){ t.photos.push({ src: d, desc: {en:'', ar:''}, link: '' }); a++; } }
   renderTab(); status('✓ '+a); setTimeout(function(){ status(''); }, 3000);
 }
 
-adminEl.addEventListener('click', function(e){
+adminEl.addEventListener('click', async function(e){
   var tab = e.target.closest('[data-tab]'); if(tab){ TAB = tab.dataset.tab; renderDash(); return; }
   var dz = e.target.closest('[data-drop]');
   if(dz && !e.target.closest('.upload-methods')){
@@ -579,6 +725,7 @@ adminEl.addEventListener('click', function(e){
   if(a === 'gup' && i > 0){ W.groups.splice(i-1, 0, W.groups.splice(i,1)[0]); renderTab(); status('•'); return; }
   if(a === 'gdown' && i < W.groups.length-1){ W.groups.splice(i+1, 0, W.groups.splice(i,1)[0]); renderTab(); status('•'); return; }
   if(a === 'pdel'){ W.groups[i].photos.splice(p,1); renderTab(); status('•'); return; }
+  if(a === 'pedit'){ window.__openDescModal(i, p); return; }
   if(a === 'pcover'){ W.groups[i].photos.unshift(W.groups[i].photos.splice(p,1)[0]); renderTab(); status('•'); return; }
   if(a === 'pleft' && p > 0){ var ar = W.groups[i].photos; ar.splice(p-1, 0, ar.splice(p,1)[0]); renderTab(); status('•'); return; }
   if(a === 'pright' && p < W.groups[i].photos.length-1){ var ar2 = W.groups[i].photos; ar2.splice(p+1, 0, ar2.splice(p,1)[0]); renderTab(); status('•'); return; }
@@ -596,23 +743,25 @@ adminEl.addEventListener('click', function(e){
     return;
   }
 
-  /* ✅ حفظ كلمة السر: محلياً + Cloudinary */
+  /* ✅ حفظ كلمة السر: hash + Cloudinary */
   if(a === 'savecred'){
     var u = $('#f_cred_u').value.trim(), pw = $('#f_cred_p').value;
-    if(!u || !pw){ alert(LANG==='ar'?'عبّئ الحقلين':'Fill both fields'); return; }
-    CRED = {u:u, p:pw};
+    if(!u || !pw){ alert(LANG==='ar'?'عبّئ الحقلين (اسم المستخدم وكلمة السر)':'Fill both fields'); return; }
+    status('🔒 Hashing...');
+    var h = await hashCreds(u, pw);
+    CRED = { u: u, h: h };
     try { localStorage.setItem(AKEY, JSON.stringify(CRED)); } catch(e){}
 
     if(cloudSignedReady()){
       status('☁️ Saving credentials to cloud...');
       saveCloudJson(CRED, CLOUD_CREDS_ID).then(function(){
-        status('✓ '+ (LANG==='ar'?'تم الحفظ على Cloudinary':'Saved globally'));
-        setTimeout(function(){ status(''); }, 3000);
+        status('✓ '+ (LANG==='ar'?'تم الحفظ والتشفير عالمياً':'Saved & hashed globally'));
+        setTimeout(function(){ status(''); }, 3500);
       }).catch(function(err){
         console.error('[RAED] save creds error:', err);
         status('⚠️ ' + (LANG==='ar'?'محلي فقط':'Local only'));
         alert((LANG==='ar'?'⚠️ تم الحفظ محلياً فقط، فشل الرفع للسحابة:\n\n':'⚠️ Saved locally only, cloud sync failed:\n\n') + err.message);
-        setTimeout(function(){ status(''); }, 4000);
+        setTimeout(function(){ status(''); }, 4500);
       });
     } else {
       status('✓ '+ (LANG==='ar'?'محلي فقط (Cloudinary غير مهيأ)':'Local only (Cloudinary not ready)'));
@@ -655,7 +804,6 @@ adminEl.addEventListener('click', function(e){
       var results = [];
       try { var u = await uploadToCloudinary(f); results.push('✅ Images: OK'); }
       catch(err){ results.push('❌ Images: ' + err.message); }
-      /* ✅ الاختبار يستخدم ملف منفصل — لا يمس ملفك الحقيقي */
       if(tdp && tak && tas){
         try { await saveCloudJson({test:true,hero:{},groups:[]}, CLOUD_TEST_ID); results.push('✅ Data: OK (test file separate)'); }
         catch(err){ results.push('❌ Data: ' + err.message); }
@@ -701,7 +849,6 @@ adminEl.addEventListener('change', function(e){
 window.addEventListener('dragover', function(e){ e.preventDefault(); });
 window.addEventListener('drop', function(e){ e.preventDefault(); });
 
-/* ✅ saveAll مع تنبيهات واضحة على أي فشل */
 async function saveAll(){
   if(!W) return;
   S = clone(W);
@@ -728,10 +875,10 @@ async function saveAll(){
   }
 }
 
-/* ✅ فتح لوحة الأدمن: 4 نقرات سريعة بالضبط — 3 أو 5 لا يفعل شي */
+/* ✅ فتح لوحة الأدمن: 4 نقرات سريعة بالضبط */
 var clickCount = 0, clickTimer = null;
-var CLICK_WINDOW = 400;    /* ms بين النقرات */
-var REQUIRED_CLICKS = 4;   /* عدد النقرات المطلوب بالضبط */
+var CLICK_WINDOW = 400;
+var REQUIRED_CLICKS = 4;
 
 $('#footerLogo').addEventListener('click', function(e){
   e.preventDefault();
@@ -753,17 +900,15 @@ if(location.hash === '#admin'){ W = clone(S); openAdmin(); }
 window.addEventListener('hashchange', function(){ if(location.hash === '#admin' && adminEl.hidden){ W = clone(S); openAdmin(); } });
 
 async function boot(){
-  /* 1. حمّل كلمة سر الأدمن من Cloudinary (إن وُجدت) */
   if(cloudSignedReady()){
     var cloudCreds = await loadCloudCreds();
     if(cloudCreds){
       CRED = cloudCreds;
       try { localStorage.setItem(AKEY, JSON.stringify(CRED)); } catch(e){}
-      console.log('[RAED] Loaded credentials from Cloudinary');
+      console.log('[RAED] Loaded credentials from Cloudinary (hashed: ' + !!cloudCreds.h + ')');
     }
   }
 
-  /* 2. حمّل بيانات الموقع من Cloudinary */
   if(cloudReady()){
     var cloudData = await loadCloudJson();
     if(cloudData){
